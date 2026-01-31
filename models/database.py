@@ -93,6 +93,7 @@ class GiftMessage(Base):
     total_value = Column(Float, nullable=False, comment='总价值(钻石)')
     send_type = Column(String(10), nullable=False, default='normal', comment='发送类型: normal/combo')
     group_id = Column(String(50), nullable=True, comment='连击组ID')
+    trace_id = Column(String(100), nullable=True, unique=True, comment='消息追踪ID，用于去重')
     created_at = Column(DateTime, nullable=False, default=get_china_now, index=True, comment='创建时间')
 
     # 关系

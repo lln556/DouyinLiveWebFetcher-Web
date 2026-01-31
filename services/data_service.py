@@ -198,11 +198,16 @@ class DataService:
         finally:
             session.close()
 
-    def save_gift_message(self, room_id: int, live_session_id: int = None, **kwargs) -> Optional[GiftMessage]:
+    def save_gift_message(self, room_id: int, live_session_id: int = None, trace_id: str = None, **kwargs) -> Optional[GiftMessage]:
         """保存礼物消息"""
         session = self.get_session()
         try:
-            msg = GiftMessage(live_room_id=room_id, live_session_id=live_session_id, **kwargs)
+            msg = GiftMessage(
+                live_room_id=room_id,
+                live_session_id=live_session_id,
+                trace_id=trace_id,
+                **kwargs
+            )
             session.add(msg)
             session.commit()
             session.refresh(msg)
@@ -211,6 +216,25 @@ class DataService:
             session.rollback()
             print(f"保存礼物消息失败: {e}")
             return None
+        finally:
+            session.close()
+
+    def update_gift_message(self, msg_id: int, **kwargs) -> bool:
+        """更新礼物消息（用于连击礼物更新数量和总价值）"""
+        session = self.get_session()
+        try:
+            msg = session.query(GiftMessage).filter(GiftMessage.id == msg_id).first()
+            if msg:
+                for key, value in kwargs.items():
+                    if hasattr(msg, key):
+                        setattr(msg, key, value)
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            print(f"更新礼物消息失败: {e}")
+            return False
         finally:
             session.close()
 

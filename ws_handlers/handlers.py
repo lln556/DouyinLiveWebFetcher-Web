@@ -226,8 +226,11 @@ class WebDouyinLiveFetcher:
 
     def _handle_gift_message(self, gift_msg):
         """处理礼物消息"""
-        # 使用 trace_id 进行去重
+        # 使用 trace_id 进行去重（第一层去重）
         trace_id = getattr(gift_msg, 'trace_id', None)
+        # 将空字符串转换为 None，避免数据库唯一约束冲突
+        if not trace_id:
+            trace_id = None
         if trace_id:
             if trace_id in self.traceId_list:
                 self.log.debug(f"礼物消息已处理过，跳过: trace_id={trace_id}")
@@ -256,37 +259,133 @@ class WebDouyinLiveFetcher:
 
         self.log.info(f"[礼物消息] user_id={user_id}, user_name={user}, gift_name={gift_name}, price={gift_price}, send_type={gift_msg.send_type}")
 
-        # 处理礼物数量
+        # 获取用户头像
+        avatar = None
+        if hasattr(gift_msg.user, 'avatar_thumb') and gift_msg.user.avatar_thumb:
+            avatar = gift_msg.user.avatar_thumb.url_list_list[0] if gift_msg.user.avatar_thumb.url_list_list else None
+
+        # 处理礼物数量和连击逻辑
         if gift_msg.send_type == 4:  # 连击礼物
-            combo_key = f"{gift_msg.group_id}_{gift_msg.user.id}_{gift_msg.gift_id}"
-            if gift_msg.repeat_end == 1:  # 连击结束
-                gift_count = gift_msg.combo_count
-                if combo_key in self.monitored_room.combo_gifts:
-                    del self.monitored_room.combo_gifts[combo_key]
-            else:  # 连击过程中
-                if combo_key not in self.monitored_room.combo_gifts:
-                    self.monitored_room.combo_gifts[combo_key] = {
-                        'last_count': 0,
-                        'total_value': 0
-                    }
-                current_count = gift_msg.combo_count
-                count_diff = current_count - self.monitored_room.combo_gifts[combo_key]['last_count']
-                self.monitored_room.combo_gifts[combo_key]['last_count'] = current_count
-                gift_count = count_diff
+            combo_key = f"{gift_msg.group_id}_{user_id}_{gift_msg.gift_id}"
+            current_count = gift_msg.combo_count
+
+            # 初始化或获取 combo 状态
+            if combo_key not in self.monitored_room.combo_gifts:
+                self.monitored_room.combo_gifts[combo_key] = {
+                    'last_count': 0,
+                    'db_id': None,  # 数据库记录ID
+                }
+
+            last_count = self.monitored_room.combo_gifts[combo_key]['last_count']
+
+            # 检查重复：count 不变则跳过（第二层去重）
+            if current_count == last_count:
+                self.log.debug(f"连击礼物重复消息，跳过: combo_key={combo_key}, count={current_count}")
+                return
+
+            # 更新状态
+            count_diff = current_count - last_count
+            self.monitored_room.combo_gifts[combo_key]['last_count'] = current_count
+
+            gift_count = current_count  # 使用累计数量
+            total_gift_value = gift_price * gift_count  # 总价值 = 单价 × 累计数量
+            send_type = 'combo'
+
+            # 判断是插入新记录还是更新已有记录
+            db_id = self.monitored_room.combo_gifts[combo_key]['db_id']
+            if db_id is None:
+                # 第一次，插入新记录
+                is_new_record = True
+            else:
+                # 已有记录，更新它
+                is_new_record = False
+
+            if is_new_record:
+                # 插入新记录，保存 db_id
+                msg = data_service.save_gift_message(
+                    self.room_id,
+                    live_session_id=self.current_session_id,
+                    user_id=user_id,
+                    user_name=user,
+                    user_level=level,
+                    gift_id=str(gift_msg.gift_id) if hasattr(gift_msg, 'gift_id') else None,
+                    gift_name=gift_name,
+                    gift_count=gift_count,
+                    gift_price=gift_price,
+                    total_value=total_gift_value,
+                    send_type=send_type,
+                    group_id=str(gift_msg.group_id) if hasattr(gift_msg, 'group_id') else None,
+                    trace_id=trace_id
+                )
+                if msg:
+                    self.monitored_room.combo_gifts[combo_key]['db_id'] = msg.id
+                self.log.info(f"连击礼物首次保存: {user} {gift_name}x{gift_count}, db_id={msg.id if msg else None}")
+            else:
+                # 更新已有记录
+                data_service.update_gift_message(
+                    db_id,
+                    gift_count=gift_count,
+                    total_value=total_gift_value
+                )
+                self.log.info(f"连击礼物更新记录: {user} {gift_name}x{gift_count}, db_id={db_id}")
+
+            # 连击结束时清理内存
+            if gift_msg.repeat_end == 1:
+                del self.monitored_room.combo_gifts[combo_key]
+
+            # 计算本次增量（用于统计和推送）
+            partial_value = gift_price * count_diff
+            self.total_income += partial_value
+            self.gift_users.add(user)
+            self.monitored_room.stats['total_income'] = self.total_income
+            self.monitored_room.update_contribution(
+                user_id,
+                user,
+                gift_value=partial_value,
+                gift_count=1,
+                user_avatar=avatar
+            )
+
+            # 更新场次统计
+            if self.current_session_id:
+                data_service.increment_session_stats(
+                    self.current_session_id,
+                    income_delta=partial_value,
+                    gift_count_delta=1
+                )
+
+            # 推送前端
+            level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
+            if gift_msg.repeat_end == 1:
+                gift_message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span> 连击完成！赠送了 {gift_count} 个 {gift_name} (价值{total_gift_value}钻石)'
+                is_combo_end = True
+            else:
+                gift_message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span> 连击中... {gift_name}x{gift_count} (本次+{count_diff})'
+                is_combo_end = False
+
+            message_data = {
+                'type': 'gift',
+                'user': user,
+                'gift_name': gift_name,
+                'gift_count': count_diff,
+                'gift_price': gift_price,
+                'total_value': partial_value,
+                'content': gift_message_content_html,
+                'combo_count': current_count,
+                'is_combo_end': is_combo_end
+            }
+            self.socketio.emit(f'room_{self.room_id}', message_data, room=f'room_{self.room_id}')
+            return  # 连击礼物处理完成
         else:  # 普通礼物
             gift_count = gift_msg.group_count
+            total_gift_value = gift_price * gift_count
+            send_type = 'normal'
 
-        total_gift_value = gift_price * gift_count
         self.total_income += total_gift_value
         self.gift_users.add(user)
 
         # 更新本地统计
         self.monitored_room.stats['total_income'] = self.total_income
-
-        # 获取用户头像
-        avatar = None
-        if hasattr(gift_msg.user, 'avatar_thumb') and gift_msg.user.avatar_thumb:
-            avatar = gift_msg.user.avatar_thumb.url_list_list[0] if gift_msg.user.avatar_thumb.url_list_list else None
 
         # 更新用户贡献
         self.monitored_room.update_contribution(
@@ -297,7 +396,7 @@ class WebDouyinLiveFetcher:
             user_avatar=avatar
         )
 
-        # 保存到数据库
+        # 保存到数据库（带 trace_id）
         data_service.save_gift_message(
             self.room_id,
             live_session_id=self.current_session_id,
@@ -309,8 +408,9 @@ class WebDouyinLiveFetcher:
             gift_count=gift_count,
             gift_price=gift_price,
             total_value=total_gift_value,
-            send_type='combo' if gift_msg.send_type == 4 else 'normal',
-            group_id=str(gift_msg.group_id) if hasattr(gift_msg, 'group_id') else None
+            send_type=send_type,
+            group_id=str(gift_msg.group_id) if hasattr(gift_msg, 'group_id') else None,
+            trace_id=trace_id
         )
 
         # 更新场次统计（礼物收入和数量）
