@@ -179,6 +179,11 @@ const app = new Vue({
                     contributorCount: data.contributor_count || 0,
                     contributorInfo: data.contributor_info || []
                 };
+
+                // 实时更新当前场次数据
+                if (data.current_session) {
+                    this.currentSession = data.current_session;
+                }
             });
         },
         handleMessage(data) {

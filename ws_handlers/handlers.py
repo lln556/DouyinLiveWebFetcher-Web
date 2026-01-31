@@ -563,13 +563,32 @@ class WebDouyinLiveFetcher:
         # 获取贡献榜
         rank_list = self.monitored_room.get_contribution_rank(100)
 
+        # 获取当前场次数据用于实时推送
+        current_session_data = None
+        if self.current_session_id:
+            data_service = self.monitored_room.manager.data_service
+            # 从数据库重新获取最新场次数据
+            session = data_service.get_current_live_session(self.live_id)
+            if session:
+                current_session_data = {
+                    'id': session.id,
+                    'start_time': session.start_time.isoformat() if session.start_time else None,
+                    'end_time': session.end_time.isoformat() if session.end_time else None,
+                    'status': session.status,
+                    'total_income': session.total_income,
+                    'total_gift_count': session.total_gift_count,
+                    'total_chat_count': session.total_chat_count,
+                    'peak_viewer_count': session.peak_viewer_count
+                }
+
         # 通过Socket.IO推送到前端
         self.socketio.emit(f'room_{self.live_id}_stats', {
             'current_user_count': self.monitored_room.stats['current_user_count'],
             'total_user_count': self.monitored_room.stats['total_user_count'],
             'total_income': self.monitored_room.stats['total_income'],
             'contributor_count': self.monitored_room.stats['contributor_count'],
-            'contributor_info': rank_list
+            'contributor_info': rank_list,
+            'current_session': current_session_data  # 添加当前场次数据
         }, room=f'room_{self.live_id}')
         self.log.debug(f"发送直播间统计: 当前{current}, 累计{total}, 总收入{self.total_income}, 贡献者数{len(self.monitored_room.user_contributions)}")
 
