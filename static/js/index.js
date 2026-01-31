@@ -14,7 +14,6 @@ const app = new Vue({
             auto_reconnect: false
         },
         editRoom: {
-            id: null,
             live_id: '',
             anchor_name: '',
             monitor_type: 'manual',
@@ -95,7 +94,6 @@ const app = new Vue({
         openEditModal(room) {
             this.showEditModal = true;
             this.editRoom = {
-                id: room.id,
                 live_id: room.live_id,
                 anchor_name: room.anchor_name,
                 monitor_type: room.monitor_type,
@@ -107,7 +105,7 @@ const app = new Vue({
         },
         async saveRoomConfig() {
             try {
-                const response = await fetch(`/api/rooms/${this.editRoom.id}/config`, {
+                const response = await fetch(`/api/rooms/${this.editRoom.live_id}/config`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

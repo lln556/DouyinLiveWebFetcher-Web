@@ -112,7 +112,7 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">
                                 <button
-                                    @click="goToRoom(room.id)"
+                                    @click="goToRoom(room.live_id)"
                                     class="text-blue-600 hover:text-blue-800 mr-3">
                                     查看
                                 </button>
@@ -123,18 +123,18 @@
                                 </button>
                                 <button
                                     v-if="room.status !== 'monitoring'"
-                                    @click="startRoom(room.id)"
+                                    @click="startRoom(room.live_id)"
                                     class="text-green-600 hover:text-green-800 mr-3">
                                     启动
                                 </button>
                                 <button
                                     v-if="room.status === 'monitoring'"
-                                    @click="stopRoom(room.id)"
+                                    @click="stopRoom(room.live_id)"
                                     class="text-yellow-600 hover:text-yellow-800 mr-3">
                                     停止
                                 </button>
                                 <button
-                                    @click="deleteRoom(room.id)"
+                                    @click="deleteRoom(room.live_id)"
                                     class="text-red-600 hover:text-red-800">
                                     删除
                                 </button>

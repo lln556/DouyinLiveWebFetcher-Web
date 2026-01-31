@@ -24,10 +24,8 @@ class LiveRoom(Base):
     """直播间表"""
     __tablename__ = 'live_rooms'
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    live_id = Column(String(50), unique=True, nullable=False, index=True, comment='直播间ID')
-    room_id = Column(String(50), nullable=True, comment='内部room_id')
-    anchor_name = Column(String(100), nullable=True, comment='主播名称')
+    live_id = Column(String(50), primary_key=True, comment='直播间ID')
+    anchor_name = Column(String(100), nullable=False, comment='主播名称')
     anchor_id = Column(String(50), nullable=True, comment='主播ID')
     status = Column(String(20), nullable=False, default='stopped', comment='监控状态: monitoring/stopped/offline/error')
     monitor_type = Column(String(10), nullable=False, default='manual', comment='监控类型: 24h/manual')
@@ -47,7 +45,7 @@ class LiveRoom(Base):
     system_events = relationship('SystemEvent', back_populates='live_room', cascade='all, delete-orphan')
 
     def __repr__(self):
-        return f'<LiveRoom(live_id={self.live_id}, status={self.status})>'
+        return f'<LiveRoom(live_id={self.live_id}, anchor_name={self.anchor_name}, status={self.status})>'
 
 
 class ChatMessage(Base):
@@ -55,7 +53,8 @@ class ChatMessage(Base):
     __tablename__ = 'chat_messages'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    live_room_id = Column(Integer, ForeignKey('live_rooms.id', ondelete='CASCADE'), nullable=False, index=True)
+    live_id = Column(String(50), ForeignKey('live_rooms.live_id', ondelete='CASCADE'), nullable=False, index=True, comment='直播间ID')
+    anchor_name = Column(String(100), nullable=True, comment='主播名称')
     live_session_id = Column(Integer, ForeignKey('live_sessions.id', ondelete='SET NULL'), nullable=True, index=True, comment='直播场次ID')
     user_id = Column(String(50), nullable=False, index=True, comment='用户ID')
     user_name = Column(String(100), nullable=False, comment='用户名称')
@@ -69,7 +68,7 @@ class ChatMessage(Base):
 
     # 索引
     __table_args__ = (
-        Index('idx_chat_room_time', 'live_room_id', 'created_at'),
+        Index('idx_chat_room_time', 'live_id', 'created_at'),
     )
 
     def __repr__(self):
@@ -81,7 +80,8 @@ class GiftMessage(Base):
     __tablename__ = 'gift_messages'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    live_room_id = Column(Integer, ForeignKey('live_rooms.id', ondelete='CASCADE'), nullable=False, index=True)
+    live_id = Column(String(50), ForeignKey('live_rooms.live_id', ondelete='CASCADE'), nullable=False, index=True, comment='直播间ID')
+    anchor_name = Column(String(100), nullable=True, comment='主播名称')
     live_session_id = Column(Integer, ForeignKey('live_sessions.id', ondelete='SET NULL'), nullable=True, index=True, comment='直播场次ID')
     user_id = Column(String(50), nullable=False, index=True, comment='用户ID')
     user_name = Column(String(100), nullable=False, comment='用户名称')
@@ -101,7 +101,7 @@ class GiftMessage(Base):
 
     # 索引
     __table_args__ = (
-        Index('idx_gift_room_time', 'live_room_id', 'created_at'),
+        Index('idx_gift_room_time', 'live_id', 'created_at'),
         Index('idx_gift_user', 'user_id', 'created_at'),
     )
 
@@ -114,7 +114,8 @@ class RoomStats(Base):
     __tablename__ = 'room_stats'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    live_room_id = Column(Integer, ForeignKey('live_rooms.id', ondelete='CASCADE'), nullable=False, index=True)
+    live_id = Column(String(50), ForeignKey('live_rooms.live_id', ondelete='CASCADE'), nullable=False, index=True, comment='直播间ID')
+    anchor_name = Column(String(100), nullable=True, comment='主播名称')
     current_user_count = Column(Integer, nullable=True, comment='当前观看人数')
     total_user_count = Column(Integer, nullable=True, comment='累计观看人数')
     total_income = Column(Float, nullable=False, default=0, comment='总收入(钻石)')
@@ -126,11 +127,11 @@ class RoomStats(Base):
 
     # 索引
     __table_args__ = (
-        Index('idx_stats_room_time', 'live_room_id', 'stats_at'),
+        Index('idx_stats_room_time', 'live_id', 'stats_at'),
     )
 
     def __repr__(self):
-        return f'<RoomStats(room_id={self.live_room_id}, income={self.total_income})>'
+        return f'<RoomStats(live_id={self.live_id}, income={self.total_income})>'
 
 
 class UserContribution(Base):
@@ -138,7 +139,8 @@ class UserContribution(Base):
     __tablename__ = 'user_contributions'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    live_room_id = Column(Integer, ForeignKey('live_rooms.id', ondelete='CASCADE'), nullable=False, index=True)
+    live_id = Column(String(50), ForeignKey('live_rooms.live_id', ondelete='CASCADE'), nullable=False, index=True, comment='直播间ID')
+    anchor_name = Column(String(100), nullable=True, comment='主播名称')
     user_id = Column(String(50), nullable=False, index=True, comment='用户ID')
     user_name = Column(String(100), nullable=False, comment='用户名称')
     total_score = Column(Float, nullable=False, default=0, comment='总贡献值(钻石)')
@@ -153,8 +155,8 @@ class UserContribution(Base):
 
     # 唯一约束
     __table_args__ = (
-        UniqueConstraint('live_room_id', 'user_id', name='uq_room_user'),
-        Index('idx_contribution_score', 'live_room_id', 'total_score'),
+        UniqueConstraint('live_id', 'user_id', name='uq_room_user'),
+        Index('idx_contribution_score', 'live_id', 'total_score'),
     )
 
     def __repr__(self):
@@ -166,7 +168,8 @@ class SystemEvent(Base):
     __tablename__ = 'system_events'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    live_room_id = Column(Integer, ForeignKey('live_rooms.id', ondelete='CASCADE'), nullable=True, index=True)
+    live_id = Column(String(50), ForeignKey('live_rooms.live_id', ondelete='CASCADE'), nullable=True, index=True, comment='直播间ID')
+    anchor_name = Column(String(100), nullable=True, comment='主播名称')
     event_type = Column(String(50), nullable=False, index=True, comment='事件类型: connect/disconnect/error/reconnect')
     event_message = Column(Text, nullable=True, comment='事件消息')
     event_data = Column(SQLAlchemyJSON, nullable=True, comment='事件数据(JSON)')
@@ -177,7 +180,7 @@ class SystemEvent(Base):
 
     # 索引
     __table_args__ = (
-        Index('idx_event_room_time', 'live_room_id', 'created_at'),
+        Index('idx_event_room_time', 'live_id', 'created_at'),
         Index('idx_event_type_time', 'event_type', 'created_at'),
     )
 
@@ -190,7 +193,8 @@ class LiveSession(Base):
     __tablename__ = 'live_sessions'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    live_room_id = Column(Integer, ForeignKey('live_rooms.id', ondelete='CASCADE'), nullable=False, index=True)
+    live_id = Column(String(50), ForeignKey('live_rooms.live_id', ondelete='CASCADE'), nullable=False, index=True, comment='直播间ID')
+    anchor_name = Column(String(100), nullable=True, comment='主播名称')
     start_time = Column(DateTime, nullable=False, default=get_china_now, comment='开播时间')
     end_time = Column(DateTime, nullable=True, comment='结束时间')
     status = Column(String(20), nullable=False, default='live', comment='状态: live/ended')
@@ -207,10 +211,10 @@ class LiveSession(Base):
 
     # 索引
     __table_args__ = (
-        Index('idx_session_room_time', 'live_room_id', 'start_time'),
+        Index('idx_session_room_time', 'live_id', 'start_time'),
         Index('idx_session_status', 'status', 'start_time'),
     )
 
     def __repr__(self):
-        return f'<LiveSession(room_id={self.live_room_id}, status={self.status}, income={self.total_income})>'
+        return f'<LiveSession(live_id={self.live_id}, status={self.status}, income={self.total_income})>'
 

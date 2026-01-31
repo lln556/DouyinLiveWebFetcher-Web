@@ -74,15 +74,7 @@ class DataService:
         finally:
             session.close()
 
-    def get_live_room(self, room_id: int) -> Optional[LiveRoom]:
-        """根据ID获取直播间"""
-        session = self.get_session()
-        try:
-            return session.query(LiveRoom).filter(LiveRoom.id == room_id).first()
-        finally:
-            session.close()
-
-    def get_live_room_by_live_id(self, live_id: str) -> Optional[LiveRoom]:
+    def get_live_room(self, live_id: str) -> Optional[LiveRoom]:
         """根据live_id获取直播间"""
         session = self.get_session()
         try:
@@ -118,11 +110,11 @@ class DataService:
         finally:
             session.close()
 
-    def update_live_room(self, room_id: int, **kwargs) -> bool:
+    def update_live_room(self, live_id: str, **kwargs) -> bool:
         """更新直播间信息"""
         session = self.get_session()
         try:
-            room = session.query(LiveRoom).filter(LiveRoom.id == room_id).first()
+            room = session.query(LiveRoom).filter(LiveRoom.live_id == live_id).first()
             if room:
                 for key, value in kwargs.items():
                     if hasattr(room, key):
@@ -134,27 +126,27 @@ class DataService:
         finally:
             session.close()
 
-    def update_live_room_status(self, room_id: int, status: str, error_message: str = None) -> bool:
+    def update_live_room_status(self, live_id: str, status: str, error_message: str = None) -> bool:
         """更新直播间状态"""
         return self.update_live_room(
-            room_id,
+            live_id,
             status=status,
             error_message=error_message,
             updated_at=get_china_now()
         )
 
-    def update_live_room_reconnect(self, room_id: int, reconnect_count: int) -> bool:
+    def update_live_room_reconnect(self, live_id: str, reconnect_count: int) -> bool:
         """更新重连次数"""
         return self.update_live_room(
-            room_id,
+            live_id,
             reconnect_count=reconnect_count
         )
 
-    def delete_live_room(self, room_id: int) -> bool:
+    def delete_live_room(self, live_id: str) -> bool:
         """删除直播间"""
         session = self.get_session()
         try:
-            room = session.query(LiveRoom).filter(LiveRoom.id == room_id).first()
+            room = session.query(LiveRoom).filter(LiveRoom.live_id == live_id).first()
             if room:
                 session.delete(room)
                 session.commit()
@@ -167,9 +159,9 @@ class DataService:
         """获取统计摘要"""
         session = self.get_session()
         try:
-            total_rooms = session.query(func.count(LiveRoom.id)).scalar()
-            monitoring_rooms = session.query(func.count(LiveRoom.id)).filter(LiveRoom.status == 'monitoring').scalar()
-            h24_rooms = session.query(func.count(LiveRoom.id)).filter(LiveRoom.monitor_type == '24h').scalar()
+            total_rooms = session.query(func.count(LiveRoom.live_id)).scalar()
+            monitoring_rooms = session.query(func.count(LiveRoom.live_id)).filter(LiveRoom.status == 'monitoring').scalar()
+            h24_rooms = session.query(func.count(LiveRoom.live_id)).filter(LiveRoom.monitor_type == '24h').scalar()
 
             return {
                 'total_rooms': total_rooms or 0,
@@ -182,11 +174,11 @@ class DataService:
 
     # ==================== 消息操作 ====================
 
-    def save_chat_message(self, room_id: int, live_session_id: int = None, **kwargs) -> Optional[ChatMessage]:
+    def save_chat_message(self, live_id: str, live_session_id: int = None, anchor_name: str = None, **kwargs) -> Optional[ChatMessage]:
         """保存弹幕消息"""
         session = self.get_session()
         try:
-            msg = ChatMessage(live_room_id=room_id, live_session_id=live_session_id, **kwargs)
+            msg = ChatMessage(live_id=live_id, live_session_id=live_session_id, anchor_name=anchor_name, **kwargs)
             session.add(msg)
             session.commit()
             session.refresh(msg)
@@ -198,13 +190,14 @@ class DataService:
         finally:
             session.close()
 
-    def save_gift_message(self, room_id: int, live_session_id: int = None, trace_id: str = None, **kwargs) -> Optional[GiftMessage]:
+    def save_gift_message(self, live_id: str, live_session_id: int = None, anchor_name: str = None, trace_id: str = None, **kwargs) -> Optional[GiftMessage]:
         """保存礼物消息"""
         session = self.get_session()
         try:
             msg = GiftMessage(
-                live_room_id=room_id,
+                live_id=live_id,
                 live_session_id=live_session_id,
+                anchor_name=anchor_name,
                 trace_id=trace_id,
                 **kwargs
             )
@@ -238,27 +231,27 @@ class DataService:
         finally:
             session.close()
 
-    def get_chat_messages(self, room_id: int, limit: int = 100, offset: int = 0) -> List[ChatMessage]:
+    def get_chat_messages(self, live_id: str, limit: int = 100, offset: int = 0) -> List[ChatMessage]:
         """获取弹幕消息"""
         session = self.get_session()
         try:
             return session.query(ChatMessage).filter(
-                ChatMessage.live_room_id == room_id
+                ChatMessage.live_id == live_id
             ).order_by(ChatMessage.created_at.desc()).offset(offset).limit(limit).all()
         finally:
             session.close()
 
-    def get_gift_messages(self, room_id: int, limit: int = 100, offset: int = 0) -> List[GiftMessage]:
+    def get_gift_messages(self, live_id: str, limit: int = 100, offset: int = 0) -> List[GiftMessage]:
         """获取礼物消息"""
         session = self.get_session()
         try:
             return session.query(GiftMessage).filter(
-                GiftMessage.live_room_id == room_id
+                GiftMessage.live_id == live_id
             ).order_by(GiftMessage.created_at.desc()).offset(offset).limit(limit).all()
         finally:
             session.close()
 
-    def get_all_messages(self, room_id: int, limit: int = 100) -> List[Dict]:
+    def get_all_messages(self, live_id: str, limit: int = 100) -> List[Dict]:
         """获取所有消息（弹幕和礼物混合）"""
         session = self.get_session()
         try:
@@ -267,17 +260,17 @@ class DataService:
                 SELECT 'chat' as type, id, user_name, user_level, content as display_content,
                        NULL as gift_name, NULL as gift_count, NULL as total_value, created_at
                 FROM chat_messages
-                WHERE live_room_id = :room_id
+                WHERE live_id = :live_id
                 UNION ALL
                 SELECT 'gift' as type, id, user_name, user_level,
                        CONCAT(user_name, ' 赠送了 ', gift_name, 'x', gift_count) as display_content,
                        gift_name, gift_count, total_value, created_at
                 FROM gift_messages
-                WHERE live_room_id = :room_id
+                WHERE live_id = :live_id
                 ORDER BY created_at DESC
                 LIMIT :limit
             """)
-            result = session.execute(sql, {'room_id': room_id, 'limit': limit})
+            result = session.execute(sql, {'live_id': live_id, 'limit': limit})
             # SQLAlchemy 2.0 兼容方式转换 Row 为 Dict
             return [row._asdict() if hasattr(row, '_asdict') else dict(row._mapping) for row in result]
         finally:
@@ -285,11 +278,11 @@ class DataService:
 
     # ==================== 统计操作 ====================
 
-    def save_room_stats(self, room_id: int, **kwargs) -> Optional[RoomStats]:
+    def save_room_stats(self, live_id: str, anchor_name: str = None, **kwargs) -> Optional[RoomStats]:
         """保存统计快照"""
         session = self.get_session()
         try:
-            stats = RoomStats(live_room_id=room_id, **kwargs)
+            stats = RoomStats(live_id=live_id, anchor_name=anchor_name, **kwargs)
             session.add(stats)
             session.commit()
             session.refresh(stats)
@@ -301,24 +294,24 @@ class DataService:
         finally:
             session.close()
 
-    def get_latest_stats(self, room_id: int) -> Optional[RoomStats]:
+    def get_latest_stats(self, live_id: str) -> Optional[RoomStats]:
         """获取最新统计"""
         session = self.get_session()
         try:
             return session.query(RoomStats).filter(
-                RoomStats.live_room_id == room_id
+                RoomStats.live_id == live_id
             ).order_by(RoomStats.stats_at.desc()).first()
         finally:
             session.close()
 
-    def get_room_stats_history(self, room_id: int, hours: int = 24) -> List[RoomStats]:
+    def get_room_stats_history(self, live_id: str, hours: int = 24) -> List[RoomStats]:
         """获取统计历史"""
         session = self.get_session()
         try:
             since = get_china_now() - timedelta(hours=hours)
             return session.query(RoomStats).filter(
                 and_(
-                    RoomStats.live_room_id == room_id,
+                    RoomStats.live_id == live_id,
                     RoomStats.stats_at >= since
                 )
             ).order_by(RoomStats.stats_at.asc()).all()
@@ -327,7 +320,7 @@ class DataService:
 
     # ==================== 贡献榜操作 ====================
 
-    def update_user_contribution(self, room_id: int, user_id: str, user_name: str,
+    def update_user_contribution(self, live_id: str, anchor_name: str, user_id: str, user_name: str,
                                  gift_value: float = 0, gift_count: int = 0,
                                  chat_count: int = 0, user_avatar: str = None) -> UserContribution:
         """更新用户贡献"""
@@ -335,7 +328,7 @@ class DataService:
         try:
             contribution = session.query(UserContribution).filter(
                 and_(
-                    UserContribution.live_room_id == room_id,
+                    UserContribution.live_id == live_id,
                     UserContribution.user_id == user_id
                 )
             ).first()
@@ -347,10 +340,13 @@ class DataService:
                 if user_avatar:
                     contribution.user_avatar = user_avatar
                 contribution.user_name = user_name  # 更新用户名
+                if anchor_name:
+                    contribution.anchor_name = anchor_name  # 更新主播名
                 contribution.updated_at = get_china_now()
             else:
                 contribution = UserContribution(
-                    live_room_id=room_id,
+                    live_id=live_id,
+                    anchor_name=anchor_name,
                     user_id=user_id,
                     user_name=user_name,
                     total_score=gift_value,
@@ -370,39 +366,39 @@ class DataService:
         finally:
             session.close()
 
-    def get_top_contributors(self, room_id: int, limit: int = 100) -> List[UserContribution]:
+    def get_top_contributors(self, live_id: str, limit: int = 100) -> List[UserContribution]:
         """获取贡献榜TOP N"""
         session = self.get_session()
         try:
             return session.query(UserContribution).filter(
-                UserContribution.live_room_id == room_id
+                UserContribution.live_id == live_id
             ).order_by(UserContribution.total_score.desc()).limit(limit).all()
         finally:
             session.close()
 
-    def get_user_contribution(self, room_id: int, user_id: str) -> Optional[UserContribution]:
+    def get_user_contribution(self, live_id: str, user_id: str) -> Optional[UserContribution]:
         """获取用户贡献"""
         session = self.get_session()
         try:
             return session.query(UserContribution).filter(
                 and_(
-                    UserContribution.live_room_id == room_id,
+                    UserContribution.live_id == live_id,
                     UserContribution.user_id == user_id
                 )
             ).first()
         finally:
             session.close()
 
-    def get_session_contributors(self, room_id: int, session_id: int, limit: int = 100) -> List[Dict]:
+    def get_session_contributors(self, live_id: str, session_id: int, limit: int = 100) -> List[Dict]:
         """获取指定直播场次的贡献榜（按礼物消息聚合）"""
         session = self.get_session()
         try:
             # 从礼物消息中聚合统计每个用户的贡献
             # 由于 GiftMessage 表没有 user_avatar 字段，如果不关联查询，头像将为空
             # 这里简化处理：先聚合礼物数据，再单独批量查询用户头像（比复杂的 join 更可控）
-            
+
             from sqlalchemy import func
-            
+
             # 1. 聚合礼物数据
             gift_stats = session.query(
                 GiftMessage.user_id,
@@ -412,7 +408,7 @@ class DataService:
                 func.count(GiftMessage.id).label('gift_count')
             ).filter(
                 and_(
-                    GiftMessage.live_room_id == room_id,
+                    GiftMessage.live_id == live_id,
                     GiftMessage.live_session_id == session_id
                 )
             ).group_by(
@@ -432,7 +428,7 @@ class DataService:
             if user_ids:
                 user_rows = session.query(UserContribution.user_id, UserContribution.user_avatar).filter(
                     and_(
-                        UserContribution.live_room_id == room_id,
+                        UserContribution.live_id == live_id,
                         UserContribution.user_id.in_(user_ids)
                     )
                 ).all()
@@ -455,12 +451,13 @@ class DataService:
 
     # ==================== 事件日志 ====================
 
-    def log_system_event(self, room_id: int, event_type: str, message: str = None, data: Dict = None) -> SystemEvent:
+    def log_system_event(self, live_id: str, event_type: str, message: str = None, data: Dict = None, anchor_name: str = None) -> SystemEvent:
         """记录系统事件"""
         session = self.get_session()
         try:
             event = SystemEvent(
-                live_room_id=room_id,
+                live_id=live_id,
+                anchor_name=anchor_name,
                 event_type=event_type,
                 event_message=message,
                 event_data=data
@@ -476,13 +473,13 @@ class DataService:
         finally:
             session.close()
 
-    def get_system_events(self, room_id: int = None, event_type: str = None, limit: int = 100) -> List[SystemEvent]:
+    def get_system_events(self, live_id: str = None, event_type: str = None, limit: int = 100) -> List[SystemEvent]:
         """获取系统事件"""
         session = self.get_session()
         try:
             query = session.query(SystemEvent)
-            if room_id:
-                query = query.filter(SystemEvent.live_room_id == room_id)
+            if live_id:
+                query = query.filter(SystemEvent.live_id == live_id)
             if event_type:
                 query = query.filter(SystemEvent.event_type == event_type)
             return query.order_by(SystemEvent.created_at.desc()).limit(limit).all()
@@ -530,11 +527,11 @@ class DataService:
 
     # ==================== 直播场次操作 ====================
 
-    def create_live_session(self, room_id: int, **kwargs) -> Optional[LiveSession]:
+    def create_live_session(self, live_id: str, anchor_name: str = None, **kwargs) -> Optional[LiveSession]:
         """创建新的直播场次"""
         session = self.get_session()
         try:
-            session_obj = LiveSession(live_room_id=room_id, **kwargs)
+            session_obj = LiveSession(live_id=live_id, anchor_name=anchor_name, **kwargs)
             session.add(session_obj)
             session.commit()
             session.refresh(session_obj)
@@ -546,13 +543,13 @@ class DataService:
         finally:
             session.close()
 
-    def get_current_live_session(self, room_id: int) -> Optional[LiveSession]:
+    def get_current_live_session(self, live_id: str) -> Optional[LiveSession]:
         """获取当前进行中的直播场次"""
         session = self.get_session()
         try:
             return session.query(LiveSession).filter(
                 and_(
-                    LiveSession.live_room_id == room_id,
+                    LiveSession.live_id == live_id,
                     LiveSession.status == 'live'
                 )
             ).order_by(LiveSession.start_time.desc()).first()
@@ -621,13 +618,13 @@ class DataService:
         finally:
             session.close()
 
-    def get_live_sessions(self, room_id: int = None, status: str = None, limit: int = 100) -> List[LiveSession]:
+    def get_live_sessions(self, live_id: str = None, status: str = None, limit: int = 100) -> List[LiveSession]:
         """获取直播场次列表"""
         session = self.get_session()
         try:
             query = session.query(LiveSession)
-            if room_id:
-                query = query.filter(LiveSession.live_room_id == room_id)
+            if live_id:
+                query = query.filter(LiveSession.live_id == live_id)
             if status:
                 query = query.filter(LiveSession.status == status)
             return query.order_by(LiveSession.start_time.desc()).limit(limit).all()
@@ -644,7 +641,8 @@ class DataService:
 
             return {
                 'id': session_obj.id,
-                'live_room_id': session_obj.live_room_id,
+                'live_id': session_obj.live_id,
+                'anchor_name': session_obj.anchor_name,
                 'start_time': session_obj.start_time.isoformat() if session_obj.start_time else None,
                 'end_time': session_obj.end_time.isoformat() if session_obj.end_time else None,
                 'status': session_obj.status,
@@ -656,11 +654,11 @@ class DataService:
         finally:
             session.close()
 
-    def get_room_sessions_stats(self, room_id: int, start_date: str = None, end_date: str = None, limit: int = 100) -> List[Dict]:
+    def get_room_sessions_stats(self, live_id: str, start_date: str = None, end_date: str = None, limit: int = 100) -> List[Dict]:
         """获取房间的直播场次统计列表"""
         session = self.get_session()
         try:
-            query = session.query(LiveSession).filter(LiveSession.live_room_id == room_id)
+            query = session.query(LiveSession).filter(LiveSession.live_id == live_id)
 
             if start_date:
                 # 添加时间部分，确保包含整天
@@ -682,6 +680,8 @@ class DataService:
             for s in sessions:
                 result.append({
                     'id': s.id,
+                    'live_id': s.live_id,
+                    'anchor_name': s.anchor_name,
                     'start_time': s.start_time.isoformat() if s.start_time else None,
                     'end_time': s.end_time.isoformat() if s.end_time else None,
                     'status': s.status,
@@ -694,14 +694,14 @@ class DataService:
         finally:
             session.close()
 
-    def get_sessions_aggregated_stats(self, room_id: int = None, start_date: str = None, end_date: str = None) -> Dict:
+    def get_sessions_aggregated_stats(self, live_id: str = None, start_date: str = None, end_date: str = None) -> Dict:
         """获取按时间段聚合的直播统计数据"""
         session = self.get_session()
         try:
             query = session.query(LiveSession)
 
-            if room_id:
-                query = query.filter(LiveSession.live_room_id == room_id)
+            if live_id:
+                query = query.filter(LiveSession.live_id == live_id)
 
             if start_date:
                 # 添加时间部分，确保包含整天
