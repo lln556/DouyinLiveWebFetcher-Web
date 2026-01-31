@@ -4,9 +4,7 @@
 const app = new Vue({
     el: '#app',
     data: {
-        roomId: null,
         liveId: null,
-        room_id: null,  // 用于模板显示
         live_id: null,  // 用于模板显示
         room: null,
         loading: true,
@@ -40,12 +38,10 @@ const app = new Vue({
     },
     mounted() {
         console.log('=== Vue mounted 开始 ===');
-        this.roomId = document.querySelector('meta[name="room-id"]').content;
         this.liveId = document.querySelector('meta[name="live-id"]').content;
-        this.room_id = this.roomId;  // 同时设置下划线版本
-        this.live_id = this.liveId;  // 同时设置下划线版本
+        this.live_id = this.liveId;
 
-        console.log('roomId:', this.roomId, 'liveId:', this.liveId);
+        console.log('liveId:', this.liveId);
         console.log('Vue 实例:', this);
         console.log('messages 数组:', this.messages);
 
@@ -63,7 +59,7 @@ const app = new Vue({
     methods: {
         async loadRoomInfo() {
             try {
-                const response = await fetch(`/api/rooms/${this.roomId}`);
+                const response = await fetch(`/api/rooms/${this.liveId}`);
                 const data = await response.json();
 
                 if (data.room) {
@@ -83,7 +79,7 @@ const app = new Vue({
         },
         async loadCurrentSession() {
             try {
-                const response = await fetch(`/api/rooms/${this.roomId}/current-session`);
+                const response = await fetch(`/api/rooms/${this.liveId}/current-session`);
                 const data = await response.json();
                 if (data.session) {
                     this.currentSession = data.session;
@@ -94,7 +90,7 @@ const app = new Vue({
         },
         async loadHistoryMessages() {
             try {
-                const response = await fetch(`/api/rooms/${this.roomId}/messages?limit=50`);
+                const response = await fetch(`/api/rooms/${this.liveId}/messages?limit=50`);
                 const data = await response.json();
 
                 if (data.messages) {
@@ -106,7 +102,7 @@ const app = new Vue({
         },
         async startMonitoring() {
             try {
-                const response = await fetch(`/api/rooms/${this.roomId}/start`, {
+                const response = await fetch(`/api/rooms/${this.liveId}/start`, {
                     method: 'POST'
                 });
                 const data = await response.json();
@@ -124,7 +120,7 @@ const app = new Vue({
             if (!confirm('确定要停止监控吗？')) return;
 
             try {
-                const response = await fetch(`/api/rooms/${this.roomId}/stop`, {
+                const response = await fetch(`/api/rooms/${this.liveId}/stop`, {
                     method: 'POST'
                 });
                 const data = await response.json();
@@ -140,7 +136,7 @@ const app = new Vue({
         },
         async loadContributors() {
             try {
-                const response = await fetch(`/api/rooms/${this.roomId}/contributors?limit=100`);
+                const response = await fetch(`/api/rooms/${this.liveId}/contributors?limit=100`);
                 const data = await response.json();
 
                 if (data.contributors) {
@@ -160,18 +156,18 @@ const app = new Vue({
             this.socket.on('connect', () => {
                 console.log('Socket.IO连接已建立');
                 // 加入房间
-                this.socket.emit('join', { room_id: this.roomId });
+                this.socket.emit('join', { live_id: this.liveId });
             });
 
             this.socket.on('disconnect', () => {
                 console.log('Socket.IO连接已断开');
             });
 
-            this.socket.on(`room_${this.roomId}`, (data) => {
+            this.socket.on(`room_${this.liveId}`, (data) => {
                 this.handleMessage(data);
             });
 
-            this.socket.on(`room_${this.roomId}_stats`, (data) => {
+            this.socket.on(`room_${this.liveId}_stats`, (data) => {
                 this.stats = {
                     currentUserCount: data.current_user_count || 0,
                     totalUserCount: data.total_user_count || 0,

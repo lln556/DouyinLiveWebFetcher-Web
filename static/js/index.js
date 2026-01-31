@@ -172,9 +172,9 @@ const app = new Vue({
                 alert('添加失败: ' + error.message);
             }
         },
-        async startRoom(roomId) {
+        async startRoom(liveId) {
             try {
-                const response = await fetch(`/api/rooms/${roomId}/start`, {
+                const response = await fetch(`/api/rooms/${liveId}/start`, {
                     method: 'POST'
                 });
                 const data = await response.json();
@@ -188,11 +188,11 @@ const app = new Vue({
                 alert('启动失败: ' + error.message);
             }
         },
-        async stopRoom(roomId) {
+        async stopRoom(liveId) {
             if (!confirm('确定要停止监控吗？')) return;
 
             try {
-                const response = await fetch(`/api/rooms/${roomId}/stop`, {
+                const response = await fetch(`/api/rooms/${liveId}/stop`, {
                     method: 'POST'
                 });
                 const data = await response.json();
@@ -206,11 +206,11 @@ const app = new Vue({
                 alert('停止失败: ' + error.message);
             }
         },
-        async deleteRoom(roomId) {
+        async deleteRoom(liveId) {
             if (!confirm('确定要删除此房间吗？此操作不可恢复！')) return;
 
             try {
-                const response = await fetch(`/api/rooms/${roomId}`, {
+                const response = await fetch(`/api/rooms/${liveId}`, {
                     method: 'DELETE'
                 });
                 const data = await response.json();
@@ -225,8 +225,8 @@ const app = new Vue({
                 alert('删除失败: ' + error.message);
             }
         },
-        goToRoom(roomId) {
-            window.location.href = `/room/${roomId}`;
+        goToRoom(liveId) {
+            window.location.href = `/room/${liveId}`;
         },
         getStatusClass(status) {
             switch (status) {

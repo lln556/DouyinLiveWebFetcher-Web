@@ -58,13 +58,13 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/room/<int:room_id>')
-def room_detail(room_id):
+@app.route('/room/<live_id>')
+def room_detail(live_id):
     """房间详情页"""
-    room = data_service.get_live_room(room_id)
+    room = data_service.get_live_room(live_id)
     if not room:
         return "房间不存在", 404
-    return render_template('room.html', room_id=room_id, live_id=room.live_id)
+    return render_template('room.html', live_id=live_id)
 
 
 @app.route('/stats')
@@ -127,11 +127,11 @@ def handle_disconnect():
 @socketio.on('join')
 def handle_join(data):
     """客户端加入房间"""
-    room_id = data.get('room_id')
-    if room_id:
-        join_room(f'room_{room_id}')
-        logger.info(f"客户端 {request.sid} 加入房间 {room_id}")
-        emit('joined', {'room_id': room_id})
+    live_id = data.get('live_id')
+    if live_id:
+        join_room(f'room_{live_id}')
+        logger.info(f"客户端 {request.sid} 加入房间 {live_id}")
+        emit('joined', {'live_id': live_id})
 
 
 # ==================== 应用启动和关闭 ====================

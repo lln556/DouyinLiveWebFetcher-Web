@@ -386,8 +386,10 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
             start_date = request.args.get('start_date')
             end_date = request.args.get('end_date')
             limit = min(int(request.args.get('limit', 50)), 200)
+            logger.info(f"获取场次列表: live_id={live_id}, start_date={start_date}, end_date={end_date}")
 
             sessions = data_service.get_room_sessions_stats(live_id, start_date, end_date, limit)
+            logger.info(f"场次列表结果: 共 {len(sessions)} 条")
 
             return jsonify({'sessions': sessions})
         except Exception as e:
@@ -405,8 +407,10 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
 
             start_date = request.args.get('start_date')
             end_date = request.args.get('end_date')
+            logger.info(f"获取房间统计: live_id={live_id}, start_date={start_date}, end_date={end_date}")
 
             stats = data_service.get_sessions_aggregated_stats(live_id, start_date, end_date)
+            logger.info(f"房间统计结果: {stats}")
 
             return jsonify({'stats': stats})
         except Exception as e:
@@ -467,8 +471,10 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
         try:
             start_date = request.args.get('start_date')
             end_date = request.args.get('end_date')
+            logger.info(f"获取全局统计: start_date={start_date}, end_date={end_date}")
 
             stats = data_service.get_sessions_aggregated_stats(None, start_date, end_date)
+            logger.info(f"全局统计结果: {stats}")
 
             return jsonify({'stats': stats})
         except Exception as e:

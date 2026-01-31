@@ -50,23 +50,28 @@ const app = new Vue({
 
             switch (this.timeRange) {
                 case 'today':
-                    startDate = new Date(today.setHours(0, 0, 0, 0));
+                    startDate = new Date(today);
+                    startDate.setHours(0, 0, 0, 0);
                     endDate = new Date();
                     break;
                 case 'yesterday':
                     const yesterday = new Date(today);
                     yesterday.setDate(yesterday.getDate() - 1);
-                    startDate = new Date(yesterday.setHours(0, 0, 0, 0));
-                    endDate = new Date(yesterday.setHours(23, 59, 59, 999));
+                    startDate = new Date(yesterday);
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate = new Date(yesterday);
+                    endDate.setHours(23, 59, 59, 999);
                     break;
                 case '7days':
                     startDate = new Date(today);
                     startDate.setDate(startDate.getDate() - 7);
+                    startDate.setHours(0, 0, 0, 0);
                     endDate = new Date();
                     break;
                 case '30days':
                     startDate = new Date(today);
                     startDate.setDate(startDate.getDate() - 30);
+                    startDate.setHours(0, 0, 0, 0);
                     endDate = new Date();
                     break;
                 case 'thisMonth':
@@ -76,6 +81,7 @@ const app = new Vue({
                 case 'lastMonth':
                     startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
                     endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                    endDate.setHours(23, 59, 59, 999);
                     break;
                 case 'custom':
                     if (!this.customStartDate || !this.customEndDate) {
@@ -87,12 +93,21 @@ const app = new Vue({
                 default:
                     startDate = new Date(today);
                     startDate.setDate(startDate.getDate() - 7);
+                    startDate.setHours(0, 0, 0, 0);
                     endDate = new Date();
             }
 
+            // 使用本地时区的日期字符串，避免时区转换问题
+            const formatDate = (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
             return {
-                start: startDate.toISOString(),
-                end: endDate.toISOString()
+                start: formatDate(startDate),
+                end: formatDate(endDate)
             };
         },
         async loadData() {

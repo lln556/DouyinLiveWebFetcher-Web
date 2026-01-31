@@ -36,7 +36,7 @@
                         class="px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
                         <option value="">全部房间</option>
                         {% raw %}
-                        <option v-for="room in rooms" :key="room.id" :value="room.id">
+                        <option v-for="room in rooms" :key="room.live_id" :value="room.live_id">
                             {{ room.anchor_name || room.live_id }} ({{ room.live_id }})
                         </option>
                         {% endraw %}
