@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抖音直播监控平台</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .message-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="app" class="container mx-auto px-4 py-8">
+        <!-- 头部 -->
+        <div class="flex justify-between items-center mb-8">
+            <div class="flex items-center gap-4">
+                <h1 class="text-3xl font-bold">抖音直播监控平台</h1>
+                <!-- 代理状态指示 -->
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-gray-500">代理:</span>
+                    <span :class="['px-2 py-1 text-xs rounded-full', proxy.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600']"
+                          v-text="proxy.enabled ? proxy.host + ':' + proxy.port : '未启用'"></span>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button
+                    @click="openProxyModal"
+                    class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600">
+                    代理设置
+                </button>
+                <a href="/stats" class="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600">
+                    数据统计
+                </a>
+                <button
+                    @click="openAddModal"
+                    class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                    添加直播间
+                </button>
+            </div>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-blue-600" v-text="stats.total_rooms"></div>
+                <div class="text-sm text-gray-600">总房间数</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-green-600" v-text="stats.monitoring_rooms"></div>
+                <div class="text-sm text-gray-600">监控中</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-gray-600" v-text="stats.stopped_rooms"></div>
+                <div class="text-sm text-gray-600">已停止</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-purple-600" v-text="stats.h24_rooms"></div>
+                <div class="text-sm text-gray-600">24小时监控</div>
+            </div>
+        </div>
+
+        <!-- 房间列表 -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b">
+                <h2 class="text-xl font-bold">监控房间列表</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">直播间ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">主播名称</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">监控类型</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">自动重连</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">重连次数</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        <tr v-if="rooms.length === 0">
+                            <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                                暂无监控房间，点击上方按钮添加
+                            </td>
+                        </tr>
+                        <tr v-for="room in rooms" :key="room.id" class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="font-medium" v-text="room.live_id"></span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span v-text="room.anchor_name || '-'"></span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span :class="['px-2 py-1 text-xs rounded-full', getStatusClass(room.status)]">
+                                    <span v-text="getStatusText(room.status)"></span>
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span v-if="room.monitor_type === '24h'" class="text-purple-600">24小时</span>
+                                <span v-else class="text-gray-600">手动</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span v-if="room.auto_reconnect" class="text-green-600">是</span>
+                                <span v-else class="text-gray-400">否</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-gray-600">
+                                <span v-text="room.reconnect_count || 0"></span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <button
+                                    @click="goToRoom(room.id)"
+                                    class="text-blue-600 hover:text-blue-800 mr-3">
+                                    查看
+                                </button>
+                                <button
+                                    @click="openEditModal(room)"
+                                    class="text-indigo-600 hover:text-indigo-800 mr-3">
+                                    编辑
+                                </button>
+                                <button
+                                    v-if="room.status !== 'monitoring'"
+                                    @click="startRoom(room.id)"
+                                    class="text-green-600 hover:text-green-800 mr-3">
+                                    启动
+                                </button>
+                                <button
+                                    v-if="room.status === 'monitoring'"
+                                    @click="stopRoom(room.id)"
+                                    class="text-yellow-600 hover:text-yellow-800 mr-3">
+                                    停止
+                                </button>
+                                <button
+                                    @click="deleteRoom(room.id)"
+                                    class="text-red-600 hover:text-red-800">
+                                    删除
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 添加房间模态框 -->
+        <div v-if="showAddModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+                <div class="px-6 py-4 border-b">
+                    <h3 class="text-lg font-bold">添加监控房间</h3>
+                </div>
+                <div class="px-6 py-4 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">直播间ID</label>
+                        <input
+                            v-model="newRoom.live_id"
+                            type="text"
+                            placeholder="例如: 261378947940"
+                            class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">监控类型</label>
+                        <select
+                            v-model="newRoom.monitor_type"
+                            class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
+                            <option value="manual">手动监控</option>
+                            <option value="24h">24小时监控</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center">
+                        <input
+                            v-model="newRoom.auto_reconnect"
+                            type="checkbox"
+                            id="auto_reconnect"
+                            class="mr-2">
+                        <label for="auto_reconnect" class="text-sm text-gray-700">启用自动重连</label>
+                    </div>
+                </div>
+                <div class="px-6 py-4 border-t flex justify-end space-x-3">
+                    <button
+                        @click="closeAddModal"
+                        class="px-4 py-2 border rounded-lg hover:bg-gray-50">
+                        取消
+                    </button>
+                    <button
+                        @click="addRoom"
+                        class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                        添加
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 代理设置模态框 -->
+        <div v-if="showProxyModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+                <div class="px-6 py-4 border-b">
+                    <h3 class="text-lg font-bold">代理设置</h3>
+                </div>
+                <div class="px-6 py-4 space-y-4">
+                    <div class="flex items-center">
+                        <input
+                            v-model="proxy.enabled"
+                            type="checkbox"
+                            id="proxy_enabled"
+                            class="mr-2">
+                        <label for="proxy_enabled" class="text-sm font-medium text-gray-700">启用代理</label>
+                    </div>
+                    <div v-if="proxy.enabled" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">代理类型</label>
+                            <select
+                                v-model="proxy.type"
+                                class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
+                                <option value="http">HTTP</option>
+                                <option value="socks5">SOCKS5</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">代理地址</label>
+                            <input
+                                v-model="proxy.host"
+                                type="text"
+                                placeholder="127.0.0.1"
+                                class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">代理端口</label>
+                            <input
+                                v-model.number="proxy.port"
+                                type="number"
+                                placeholder="7890"
+                                class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div class="text-xs text-gray-500 bg-yellow-50 p-2 rounded">
+                            注意：修改代理配置后，需要重启监控房间才能生效
+                        </div>
+                    </div>
+                </div>
+                <div class="px-6 py-4 border-t flex justify-end space-x-3">
+                    <button
+                        @click="closeProxyModal"
+                        class="px-4 py-2 border rounded-lg hover:bg-gray-50">
+                        取消
+                    </button>
+                    <button
+                        @click="updateProxyConfig"
+                        class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600">
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 编辑配置模态框 -->
+        <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+                <div class="px-6 py-4 border-b">
+                    <h3 class="text-lg font-bold">编辑监控配置</h3>
+                </div>
+                <div class="px-6 py-4 space-y-4">
+                    <div class="bg-gray-50 p-3 rounded-lg">
+                        <div class="text-sm text-gray-600">直播间: <span class="font-medium" v-text="editRoom.live_id"></span></div>
+                        <div class="text-sm text-gray-600">主播: <span class="font-medium" v-text="editRoom.anchor_name || '未知'"></span></div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">监控类型</label>
+                        <select
+                            v-model="editRoom.monitor_type"
+                            class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
+                            <option value="manual">手动监控</option>
+                            <option value="24h">24小时监控</option>
+                        </select>
+                        <div class="text-xs text-gray-500 mt-1">
+                            手动：主播未开播时停止；24小时：等待开播后自动开始
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        <input
+                            v-model="editRoom.auto_reconnect"
+                            type="checkbox"
+                            id="edit_auto_reconnect"
+                            class="mr-2">
+                        <label for="edit_auto_reconnect" class="text-sm text-gray-700">启用自动重连</label>
+                    </div>
+                    <div class="text-xs text-gray-500 bg-blue-50 p-2 rounded">
+                        注意：修改配置后，下次启动监控时生效。正在运行的监控不受影响。
+                    </div>
+                </div>
+                <div class="px-6 py-4 border-t flex justify-end space-x-3">
+                    <button
+                        @click="closeEditModal"
+                        class="px-4 py-2 border rounded-lg hover:bg-gray-50">
+                        取消
+                    </button>
+                    <button
+                        @click="saveRoomConfig"
+                        class="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600">
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/index.js"></script>
+</body>
+</html>
