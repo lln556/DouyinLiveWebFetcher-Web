@@ -2,7 +2,7 @@ import os
 import requests
 
 # 创建保存图标的目录
-save_dir = "E:\Projects\python\DouyinLiveWebFetcher\data\level_img"
+save_dir = "data/level_img"
 os.makedirs(save_dir, exist_ok=True)
 
 # 等级范围 1~75

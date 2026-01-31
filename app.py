@@ -176,14 +176,13 @@ if __name__ == '__main__':
 
         logger.info("抖音直播监控平台启动中...")
         logger.info(f"数据库: {config.DATABASE_URL}")
-        logger.info(f"访问地址: http://localhost:5000")
 
         # 运行Flask应用
         socketio.run(
             app,
             debug=config.DEBUG,
             host='0.0.0.0',
-            port=5000,
+            port=7654,
             allow_unsafe_werkzeug=True
         )
     except KeyboardInterrupt:

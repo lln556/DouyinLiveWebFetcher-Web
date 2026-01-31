@@ -3,7 +3,8 @@
 > 一个功能完整的抖音直播间实时监控平台，支持多房间24小时监控、数据持久化存储、实时 Socket.IO 推送。
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/downloads/)
-[![Flask](https://img.shields.io/badge/Flask-2.0%2B-green)](https://flask.palletsprojects.com/)
+[![uv](https://img.shields.io/badge/uv-0.5%2B-purple)](https://github.com/astral-sh/uv)
+[![Flask](https://img.shields.io/badge/Flask-3.0%2B-green)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 
 ## ⚠️ 免责声明
@@ -36,7 +37,8 @@
 
 | 组件 | 技术 |
 |------|------|
-| **后端** | Python 3.8+ / Flask 2.0+ |
+| **后端** | Python 3.8+ / Flask 3.0+ |
+| **包管理** | uv |
 | **数据库** | MySQL 8.0+ |
 | **ORM** | SQLAlchemy 2.0+ |
 | **实时通信** | Socket.IO / WebSocket |
@@ -46,29 +48,30 @@
 
 ## 📦 安装部署
 
-### 1. 克隆项目
+### 1. 安装 uv
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 或使用 pip
+pip install uv
+```
+
+### 2. 克隆项目
 
 ```bash
 git clone https://github.com/yourusername/DouyinLiveWebFetcher.git
 cd DouyinLiveWebFetcher
 ```
 
-### 2. 创建虚拟环境
-
-```bash
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# Linux/Mac
-source venv/bin/activate
-```
-
 ### 3. 安装依赖
 
 ```bash
-pip install -r requirements.txt
+./scripts/install.sh
 ```
 
 ### 4. 配置数据库
@@ -92,19 +95,19 @@ cp .env.example .env
 ### 6. 初始化数据库
 
 ```bash
-python -c "from models.database import Base, engine; Base.metadata.create_all(bind=engine)"
+./scripts/init-db.sh
 ```
 
 ### 7. 下载用户等级图标（可选）
 
 ```bash
-python utils/download_level.py
+./scripts/download-levels.sh
 ```
 
 ### 8. 启动应用
 
 ```bash
-python app.py
+./scripts/run.sh
 ```
 
 访问 `http://localhost:5000` 查看管理界面。
@@ -162,10 +165,16 @@ DouyinLiveWebFetcher/
 │   └── js/              # JavaScript 文件
 ├── protobuf/             # Protobuf 协议
 ├── utils/                # 工具函数
+├── scripts/              # 运行脚本
+│   ├── install.sh       # 安装依赖
+│   ├── run.sh           # 启动 Web 版
+│   ├── monitor.sh       # 启动命令行版
+│   ├── init-db.sh       # 初始化数据库
+│   └── download-levels.sh # 下载等级图标
 ├── config.py            # 配置文件
 ├── app.py               # Flask 应用入口
 ├── main.py              # 命令行入口
-├── requirements.txt     # 依赖列表
+├── pyproject.toml       # 项目配置与依赖
 ├── .env.example         # 环境变量模板
 └── README.md            # 本文件
 ```
