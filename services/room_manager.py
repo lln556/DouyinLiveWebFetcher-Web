@@ -35,6 +35,7 @@ class MonitoredRoom:
         self.shutdown_event = threading.Event()  # 关闭事件
         self.reconnect_count = 0  # 重连次数
         self.last_connect_time = None  # 最后连接时间
+        self.offline_check_count = 0  # 连续未开播检测次数（用于判断是否应该结束场次）
 
         # 本地统计缓存
         self.stats = {
@@ -71,6 +72,8 @@ class MonitoredRoom:
         self.shutdown_event.set()
         if self.fetcher:
             try:
+                # 停止前结束当前直播场次
+                self.fetcher._end_current_session(reason="监控停止")
                 self.fetcher.stop()
             except Exception as e:
                 logger.error(f"停止fetcher时出错: {e}")
@@ -115,6 +118,9 @@ class MonitoredRoom:
 
                 if not is_live:
                     logger.warning(f"房间 {self.live_id} 当前未开播")
+                    # 检查是否应该结束直播场次（连续多次未开播）
+                    self.check_and_end_session_if_offline("检测到主播未开播")
+
                     # 更新状态为等待
                     self.manager.data_service.update_live_room_status(
                         self.live_id,
@@ -232,6 +238,8 @@ class MonitoredRoom:
                         break
                 else:
                     logger.info(f"房间 {self.live_id} 达到最大重连次数且未开启自动重连，退出监控循环")
+                    # 结束当前直播场次（如果存在）
+                    self.end_current_session(reason="达到最大重连次数且未开启自动重连")
                     self.manager.data_service.update_live_room_status(
                         self.live_id,
                         'stopped',
@@ -282,6 +290,10 @@ class MonitoredRoom:
 
         # 达到最大轮询次数仍未检测到开播，停止监控
         logger.warning(f"房间 {self.live_id} 轮询超时（{max_poll_attempts}次），停止监控")
+
+        # 结束当前直播场次（如果存在）
+        self.end_current_session(reason=f"轮询超时（{max_poll_attempts}次未检测到开播）")
+
         self.manager.data_service.update_live_room_status(
             self.live_id,
             'stopped',
@@ -313,6 +325,35 @@ class MonitoredRoom:
     def get_stats(self) -> Dict:
         """获取统计信息"""
         return self.stats.copy()
+
+    def end_current_session(self, reason: str = "监控停止"):
+        """结束当前直播场次（如果存在）"""
+        if self.fetcher and self.fetcher.current_session_id:
+            return self.fetcher._end_current_session(reason=reason)
+        return False
+
+    def reset_offline_counter(self):
+        """重置未开播检测计数器（当成功连接时调用）"""
+        if self.offline_check_count > 0:
+            logger.info(f"[{self.live_id}] 重置未开播检测计数器: {self.offline_check_count} -> 0")
+            self.offline_check_count = 0
+
+    def check_and_end_session_if_offline(self, reason: str = "检测到未开播"):
+        """
+        检查是否应该结束直播场次
+        当连续多次检测到未开播后，才结束场次（避免网络波动导致误判）
+        :param reason: 未开播的原因
+        :return: 是否结束了场次
+        """
+        OFFLINE_THRESHOLD = 3  # 连续3次检测到未开播后，才标记为下播
+
+        self.offline_check_count += 1
+        logger.info(f"[{self.live_id}] 检测到未开播，计数器: {self.offline_check_count}/{OFFLINE_THRESHOLD}，原因={reason}")
+
+        if self.offline_check_count >= OFFLINE_THRESHOLD:
+            logger.warning(f"[{self.live_id}] 连续{OFFLINE_THRESHOLD}次检测到未开播，结束直播场次")
+            return self.end_current_session(reason=f"连续{OFFLINE_THRESHOLD}次未开播: {reason}")
+        return False
 
     def update_contribution(self, user_id: str, user_name: str, gift_value: float = 0,
                            gift_count: int = 0, chat_count: int = 0, user_avatar: str = None):
@@ -395,6 +436,9 @@ class RoomManager:
         # 启动时清理状态不一致的房间
         self._cleanup_stale_statuses()
 
+        # 启动时清理旧的未结束场次
+        self._cleanup_stale_live_sessions()
+
         logger.info("房间管理器初始化完成")
 
     def _cleanup_stale_statuses(self):
@@ -424,6 +468,19 @@ class RoomManager:
                     )
         except Exception as e:
             logger.error(f"清理状态失败: {e}")
+
+    def _cleanup_stale_live_sessions(self):
+        """
+        清理旧的未结束直播场次
+        当应用被强制退出后，数据库中可能仍有 status='live' 的场次
+        需要将这些旧场次标记为 'ended'
+        """
+        try:
+            count = self.data_service.cleanup_stale_live_sessions(stale_threshold_hours=24)
+            if count > 0:
+                logger.info(f"清理了 {count} 个未结束的直播场次")
+        except Exception as e:
+            logger.error(f"清理未结束场次失败: {e}")
 
     def add_room(self, live_id: str, monitor_type: str = 'manual', auto_reconnect: bool = False) -> Optional[str]:
         """

@@ -439,13 +439,52 @@ class DataService:
             for row in gift_stats:
                 contributors.append({
                     'user_id': row.user_id,
-                    'user_name': row.user_name or '',
-                    'total_score': float(row.total_score),
+                    'nickname': row.user_name or '',
+                    'contribution_value': float(row.total_score),
                     'gift_count': row.gift_count,
                     'user_level': row.user_level,
                     'user_avatar': avatars.get(row.user_id) # 使用查询到的头像
                 })
             return contributors
+        finally:
+            session.close()
+
+    def get_session_messages(self, session_id: int, message_type: str = 'chat', limit: int = 100) -> List[Dict]:
+        """获取指定直播场次的弹幕或礼物消息"""
+        session = self.get_session()
+        try:
+            if message_type == 'chat':
+                messages = session.query(ChatMessage).filter(
+                    ChatMessage.live_session_id == session_id
+                ).order_by(ChatMessage.created_at.desc()).limit(limit).all()
+
+                return [{
+                    'id': msg.id,
+                    'user_id': msg.user_id,
+                    'nickname': msg.user_name,
+                    'user_level': msg.user_level,
+                    'content': msg.content,
+                    'created_at': msg.created_at.isoformat() if msg.created_at else None
+                } for msg in messages]
+
+            elif message_type == 'gift':
+                messages = session.query(GiftMessage).filter(
+                    GiftMessage.live_session_id == session_id
+                ).order_by(GiftMessage.created_at.desc()).limit(limit).all()
+
+                return [{
+                    'id': msg.id,
+                    'user_id': msg.user_id,
+                    'nickname': msg.user_name,
+                    'user_level': msg.user_level,
+                    'gift_name': msg.gift_name,
+                    'gift_count': msg.gift_count,
+                    'combo_count': msg.gift_count if msg.send_type == 'combo' else 1,
+                    'diamond_count': msg.total_value,
+                    'created_at': msg.created_at.isoformat() if msg.created_at else None
+                } for msg in messages]
+
+            return []
         finally:
             session.close()
 
@@ -755,5 +794,44 @@ class DataService:
                 'total_duration_seconds': total_duration_seconds,
                 'avg_duration_seconds': avg_duration
             }
+        finally:
+            session.close()
+
+    def cleanup_stale_live_sessions(self, stale_threshold_hours: int = 24) -> int:
+        """
+        清理长时间处于 'live' 状态但实际已结束的场次
+        :param stale_threshold_hours: 超过多少小时的 'live' 场次被认为已结束，默认24小时
+        :return: 清理的场次数量
+        """
+        from models.database import get_china_now
+        from datetime import timedelta
+
+        session = self.get_session()
+        try:
+            # 计算阈值时间
+            threshold_time = get_china_now() - timedelta(hours=stale_threshold_hours)
+
+            # 查找所有超过阈值时间且状态仍为 'live' 的场次
+            stale_sessions = session.query(LiveSession).filter(
+                and_(
+                    LiveSession.status == 'live',
+                    LiveSession.start_time < threshold_time
+                )
+            ).all()
+
+            count = 0
+            for stale_session in stale_sessions:
+                stale_session.status = 'ended'
+                stale_session.end_time = stale_session.start_time + timedelta(hours=2)  # 假设直播2小时后结束
+                stale_session.updated_at = get_china_now()
+                count += 1
+                logger.info(f"清理未结束的直播场次: id={stale_session.id}, live_id={stale_session.live_id}, start_time={stale_session.start_time}")
+
+            session.commit()
+            return count
+        except Exception as e:
+            session.rollback()
+            logger.error(f"清理未结束场次失败: {e}")
+            return 0
         finally:
             session.close()

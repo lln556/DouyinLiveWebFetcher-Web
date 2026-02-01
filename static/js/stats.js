@@ -11,12 +11,21 @@ const app = new Vue({
         customEndDate: '',
         stats: {},
         sessions: [],
-        loading: true
+        loading: true,
+        hasSearched: false,
+        // 场次详情相关
+        showSessionModal: false,
+        sessionDetail: {},
+        sessionDetailLoading: false,
+        sessionDetailTab: 'chats',
+        sessionDetailChats: [],
+        sessionDetailGifts: [],
+        sessionDetailContributors: []
     },
     mounted() {
         this.loadRooms();
         this.initCustomDates();
-        this.loadData();
+        // 不在 mounted 时自动加载数据，等待用户点击查询
     },
     methods: {
         async loadRooms() {
@@ -145,6 +154,9 @@ const app = new Vue({
                 } else {
                     this.sessions = [];
                 }
+
+                // 标记已查询
+                this.hasSearched = true;
             } catch (error) {
                 console.error('加载数据失败:', error);
             } finally {
@@ -153,7 +165,43 @@ const app = new Vue({
         },
         loadRoomData() {
             this.sessions = [];
-            this.loadData();
+            this.hasSearched = false;
+            // 不自动加载数据，等待用户点击查询
+        },
+        async viewSessionDetail(session) {
+            this.showSessionModal = true;
+            this.sessionDetail = session;
+            this.sessionDetailLoading = true;
+            this.sessionDetailTab = 'chats';
+
+            try {
+                const response = await fetch(`/api/rooms/sessions/${session.id}?limit=200`);
+                const data = await response.json();
+
+                if (data.session) {
+                    this.sessionDetail = data.session;
+                }
+                if (data.chats) {
+                    this.sessionDetailChats = data.chats;
+                }
+                if (data.gifts) {
+                    this.sessionDetailGifts = data.gifts;
+                }
+                if (data.contributors) {
+                    this.sessionDetailContributors = data.contributors;
+                }
+            } catch (error) {
+                console.error('加载场次详情失败:', error);
+            } finally {
+                this.sessionDetailLoading = false;
+            }
+        },
+        closeSessionModal() {
+            this.showSessionModal = false;
+            this.sessionDetail = {};
+            this.sessionDetailChats = [];
+            this.sessionDetailGifts = [];
+            this.sessionDetailContributors = [];
         },
         formatIncome(value) {
             return value ? value.toLocaleString() + ' 钻石' : '0 钻石';

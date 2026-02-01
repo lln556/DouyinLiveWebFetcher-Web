@@ -239,15 +239,19 @@ Response (响应容器)
 ### 连击礼物处理
 
 在 `ws_handlers/handlers.py` 中处理连击礼物：
-- `send_type == 4` 表示连击礼物
+- **所有礼物都可能是连击的**，不依赖 `send_type` 判断
+- 使用 `trace_id` 去重：防止同一消息重复处理
+- 使用 `group_id` 组合连击：将相同连击序列的礼物组合起来
+- 检查 `combo_count` 字段：如果存在且大于0，说明是连击礼物
 - `repeat_end == 1` 表示连击结束
 - 使用 `combo_gifts` 字典跟踪连击状态
 
 ### 礼物去重
 
-使用 `trace_id` 防止重复处理：
+使用 `trace_id` 和 `group_id` 组合去重：
+1. 首先用 `trace_id` 去重（防止同一消息重复处理）
+2. 然后用 `group_id` 把连点的礼物组合起来
 - `traceId_list` 限制为 1000 条（保留最新 500 条）
-- 连击礼物使用 `group_id` 跟踪
 
 ### 自动重连逻辑
 

@@ -481,4 +481,35 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
             logger.error(f"获取全局聚合统计数据失败: {e}")
             return jsonify({'error': str(e)}), 500
 
+    @rooms_bp.route('/sessions/<int:session_id>', methods=['GET'])
+    def get_session_detail(session_id):
+        """获取直播场次详情（弹幕、礼物、贡献榜）"""
+        try:
+            limit = min(int(request.args.get('limit', 100)), 500)
+            logger.info(f"获取场次详情: session_id={session_id}, limit={limit}")
+
+            # 获取场次基本信息
+            session_obj = data_service.get_live_session_stats(session_id)
+            if not session_obj:
+                return jsonify({'error': '场次不存在'}), 404
+
+            # 获取场次弹幕记录
+            chats = data_service.get_session_messages(session_id, 'chat', limit)
+
+            # 获取场次礼物记录
+            gifts = data_service.get_session_messages(session_id, 'gift', limit)
+
+            # 获取场次贡献榜
+            contributors = data_service.get_session_contributors(session_obj['live_id'], session_id, limit)
+
+            return jsonify({
+                'session': session_obj,
+                'chats': chats,
+                'gifts': gifts,
+                'contributors': contributors
+            })
+        except Exception as e:
+            logger.error(f"获取场次详情失败: {e}")
+            return jsonify({'error': str(e)}), 500
+
     return rooms_bp
