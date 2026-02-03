@@ -300,7 +300,11 @@ class WebDouyinLiveFetcher:
                 count_diff = current_count - last_count
                 self.monitored_room.combo_gifts[combo_key]['last_count'] = current_count
 
-                gift_count = current_count
+                # 获取每次连击的礼物数量
+                per_combo_count = gift_msg.group_count if hasattr(gift_msg, 'group_count') else 1
+
+                # 总礼物数量 = 连击次数 × 每次数量
+                gift_count = current_count * per_combo_count
                 total_gift_value = gift_price * gift_count
 
                 # 判断是插入新记录还是更新已有记录
@@ -340,7 +344,9 @@ class WebDouyinLiveFetcher:
                     del self.monitored_room.combo_gifts[combo_key]
 
                 # 计算本次增量（用于统计和推送）
-                partial_value = gift_price * count_diff
+                # 增量礼物数量 = 连击增量 × 每次数量
+                partial_count = count_diff * per_combo_count
+                partial_value = gift_price * partial_count
                 self.total_income += partial_value
                 self.gift_users.add(user)
                 self.monitored_room.stats['total_income'] = self.total_income
@@ -348,7 +354,7 @@ class WebDouyinLiveFetcher:
                     user_id,
                     user,
                     gift_value=partial_value,
-                    gift_count=1,
+                    gift_count=partial_count,
                     user_avatar=avatar
                 )
 
@@ -357,7 +363,7 @@ class WebDouyinLiveFetcher:
                     data_service.increment_session_stats(
                         self.current_session_id,
                         income_delta=partial_value,
-                        gift_count_delta=1
+                        gift_count_delta=partial_count
                     )
 
                 # 推送前端
@@ -366,14 +372,14 @@ class WebDouyinLiveFetcher:
                     gift_message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span> 连击完成！赠送了 {gift_count} 个 {gift_name} (价值{total_gift_value}钻石)'
                     is_combo_end = True
                 else:
-                    gift_message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span> 连击中... {gift_name}x{gift_count} (本次+{count_diff})'
+                    gift_message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span> 连击中... {gift_name}x{gift_count} (本次+{partial_count})'
                     is_combo_end = False
 
                 message_data = {
                     'type': 'gift',
                     'user': user,
                     'gift_name': gift_name,
-                    'gift_count': count_diff,
+                    'gift_count': partial_count,
                     'gift_price': gift_price,
                     'total_value': partial_value,
                     'content': gift_message_content_html,
@@ -409,7 +415,7 @@ class WebDouyinLiveFetcher:
                 user_id,
                 user,
                 gift_value=total_gift_value,
-                gift_count=1,
+                gift_count=gift_count,
                 user_avatar=avatar
             )
 
@@ -434,7 +440,7 @@ class WebDouyinLiveFetcher:
                 data_service.increment_session_stats(
                     self.current_session_id,
                     income_delta=total_gift_value,
-                    gift_count_delta=1
+                    gift_count_delta=gift_count
                 )
 
             level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
@@ -465,7 +471,7 @@ class WebDouyinLiveFetcher:
             user_id,
             user,
             gift_value=total_gift_value,
-            gift_count=1,
+            gift_count=gift_count,
             user_avatar=avatar
         )
 
@@ -490,7 +496,7 @@ class WebDouyinLiveFetcher:
             data_service.increment_session_stats(
                 self.current_session_id,
                 income_delta=total_gift_value,
-                gift_count_delta=1
+                gift_count_delta=gift_count
             )
 
         level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''

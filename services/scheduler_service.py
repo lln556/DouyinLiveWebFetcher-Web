@@ -131,7 +131,7 @@ class SchedulerService:
 
             for room in rooms_24h:
                 # 检查是否已在活跃列表中
-                if room.id not in self.room_manager.active_rooms:
+                if room.live_id not in self.room_manager.active_rooms:
                     # 添加到管理器
                     room_id = self.room_manager.add_room(
                         room.live_id,
@@ -145,9 +145,9 @@ class SchedulerService:
                             logger.info(f"自动启动24小时监控: {room.live_id}")
                 else:
                     # 已在列表中，确保正在运行
-                    monitored_room = self.room_manager.active_rooms[room.id]
+                    monitored_room = self.room_manager.active_rooms[room.live_id]
                     if not monitored_room.thread or not monitored_room.thread.is_alive():
-                        if self.room_manager.start_room(room.id):
+                        if self.room_manager.start_room(room.live_id):
                             started_count += 1
                             logger.info(f"重新启动24小时监控: {room.live_id}")
 
