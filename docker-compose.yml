@@ -37,6 +37,10 @@ services:
       # 日志
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
+      # 映射代码目录 (支持热更新)
+      - .:/app
+      # 保护容器内的虚拟环境不被覆盖
+      - /app/.venv
       # 持久化数据目录
       - ./data:/app/data
       # 持久化日志目录
