@@ -329,9 +329,57 @@ class MonitoredRoom:
         return self.stats.copy()
 
     def end_current_session(self, reason: str = "监控停止"):
-        """结束当前直播场次（如果存在）"""
+        """
+        结束当前直播场次（如果存在）
+        :param reason: 结束原因
+        :return: 是否成功结束场次
+        """
+        # 优先使用 fetcher 的方法（如果存在且有活跃场次）
         if self.fetcher and self.fetcher.current_session_id:
             return self.fetcher._end_current_session(reason=reason)
+
+        # 如果没有 fetcher，使用 data_service 直接结束场次
+        data_service = self.manager.data_service
+        current_session = data_service.get_current_live_session(self.live_id)
+        if current_session:
+            session_id = current_session.id
+            success = data_service.end_live_session(session_id)
+            if success:
+                logger.info(f"[{self.live_id}] 结束直播场次: session_id={session_id}, 原因={reason}")
+
+                # 重新查询获取最新的场次数据
+                from models.database import LiveSession
+                db_session = data_service.get_session()
+                try:
+                    session = db_session.query(LiveSession).filter(LiveSession.id == session_id).first()
+                    if session:
+                        current_session_data = {
+                            'id': session.id,
+                            'start_time': session.start_time.isoformat() if session.start_time else None,
+                            'end_time': session.end_time.isoformat() if session.end_time else None,
+                            'status': session.status,
+                            'total_income': session.total_income,
+                            'total_gift_count': session.total_gift_count,
+                            'total_chat_count': session.total_chat_count,
+                            'peak_viewer_count': session.peak_viewer_count
+                        }
+
+                        # 推送状态更新给前端
+                        if self.socketio:
+                            self.socketio.emit(f'room_{self.live_id}_stats', {
+                                'current_user_count': self.stats['current_user_count'],
+                                'total_user_count': self.stats['total_user_count'],
+                                'total_income': self.stats['total_income'],
+                                'contributor_count': self.stats['contributor_count'],
+                                'contributor_info': [],
+                                'current_session': current_session_data
+                            }, room=f'room_{self.live_id}')
+                            logger.info(f"[{self.live_id}] 推送直播结束状态更新: session_id={session.id}, status={session.status}")
+                finally:
+                    db_session.close()
+                return True
+            else:
+                logger.warning(f"[{self.live_id}] 结束直播场次失败: session_id={session_id}")
         return False
 
     def reset_offline_counter(self):
