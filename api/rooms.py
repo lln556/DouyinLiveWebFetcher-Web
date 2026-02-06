@@ -75,8 +75,9 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
             if not live_id:
                 return jsonify({'error': '请提供直播间ID'}), 400
 
-            monitor_type = data.get('monitor_type', 'manual')
-            auto_reconnect = data.get('auto_reconnect', False)
+            # 默认监控类型为 24h，自动重连为 True
+            monitor_type = '24h'
+            auto_reconnect = True
 
             # 添加到管理器
             result_live_id = room_manager.add_room(live_id, monitor_type, auto_reconnect)
@@ -148,12 +149,8 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
                 if not room:
                     return jsonify({'error': '房间不存在'}), 404
 
-                # 重新添加到管理器
-                result_live_id = room_manager.add_room(
-                    room.live_id,
-                    room.monitor_type,
-                    room.auto_reconnect
-                )
+                # 重新添加到管理器（使用默认值）
+                result_live_id = room_manager.add_room(live_id, '24h', True)
                 if result_live_id != live_id:
                     return jsonify({'error': '重新添加房间失败'}), 500
 
@@ -446,50 +443,27 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
 
     @rooms_bp.route('/<live_id>/config', methods=['PUT', 'PATCH'])
     def update_room_config(live_id):
-        """更新房间配置（监控类型、自动重连等）"""
+        """更新房间配置（已废弃，保留以兼容旧版客户端）"""
         try:
             # 先检查房间是否存在
             room = data_service.get_live_room(live_id)
             if not room:
                 return jsonify({'error': '房间不存在'}), 404
 
-            data = request.get_json()
-            monitor_type = data.get('monitor_type')
-            auto_reconnect = data.get('auto_reconnect')
-
-            # 验证 monitor_type
-            if monitor_type is not None and monitor_type not in ['manual', '24h']:
-                return jsonify({'error': '监控类型必须是 manual 或 24h'}), 400
-
-            # 更新数据库
-            update_data = {}
-            if monitor_type is not None:
-                update_data['monitor_type'] = monitor_type
-            if auto_reconnect is not None:
-                update_data['auto_reconnect'] = auto_reconnect
-
-            if update_data:
-                data_service.update_live_room(live_id, **update_data)
-                logger.info(f"更新房间 {live_id} 配置: {update_data}")
-
-            # 获取更新后的房间信息
-            updated_room = data_service.get_live_room(live_id)
-
-            # 如果房间正在监控中，更新其配置
-            monitored_room = room_manager.get_room(live_id)
-
+            # 监控模式已统一为持续监控，无需配置更新
+            # 直接返回当前房间信息
             return jsonify({
-                'message': '房间配置已更新',
+                'message': '监控模式已统一为持续监控',
                 'room': {
-                    'live_id': updated_room.live_id,
-                    'anchor_name': updated_room.anchor_name,
-                    'monitor_type': updated_room.monitor_type,
-                    'auto_reconnect': updated_room.auto_reconnect,
-                    'status': updated_room.status
+                    'live_id': room.live_id,
+                    'anchor_name': room.anchor_name,
+                    'monitor_type': '24h',
+                    'auto_reconnect': True,
+                    'status': room.status
                 }
             })
         except Exception as e:
-            logger.error(f"更新房间配置失败: {e}")
+            logger.error(f"获取房间配置失败: {e}")
             return jsonify({'error': str(e)}), 500
 
     @rooms_bp.route('/sessions/stats', methods=['GET'])

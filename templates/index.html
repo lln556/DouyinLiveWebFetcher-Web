@@ -117,15 +117,13 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">主播名称</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">监控状态</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">直播状态</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">监控类型</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">自动重连</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">重连次数</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         <tr v-if="rooms.length === 0">
-                            <td colspan="8" class="px-6 py-8 text-center text-gray-500">
+                            <td colspan="6" class="px-6 py-8 text-center text-gray-500">
                                 暂无监控房间，点击上方按钮添加
                             </td>
                         </tr>
@@ -146,14 +144,6 @@
                                     <span v-text="getLiveStatusText(room.live_status)"></span>
                                 </span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span v-if="room.monitor_type === '24h'" class="text-purple-600">24小时</span>
-                                <span v-else class="text-gray-600">手动</span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span v-if="room.auto_reconnect" class="text-green-600">是</span>
-                                <span v-else class="text-gray-400">否</span>
-                            </td>
                             <td class="px-6 py-4 whitespace-nowrap text-gray-600">
                                 <span v-text="room.reconnect_count || 0"></span>
                             </td>
@@ -162,11 +152,6 @@
                                     @click="goToRoom(room.live_id)"
                                     class="text-blue-600 hover:text-blue-800 hover:underline font-medium mr-3 transition-all duration-150 active:opacity-70">
                                     查看
-                                </button>
-                                <button
-                                    @click="openEditModal(room)"
-                                    class="text-indigo-600 hover:text-indigo-800 hover:underline font-medium mr-3 transition-all duration-150 active:opacity-70">
-                                    编辑
                                 </button>
                                 <button
                                     v-if="!getIsMonitoring(room)"
@@ -207,22 +192,14 @@
                             placeholder="例如: 261378947940"
                             class="w-full px-3 py-2 border rounded-lg transition-all duration-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">监控类型</label>
-                        <select
-                            v-model="newRoom.monitor_type"
-                            class="w-full px-3 py-2 border rounded-lg transition-all duration-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                            <option value="manual">手动监控</option>
-                            <option value="24h">24小时监控</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center">
-                        <input
-                            v-model="newRoom.auto_reconnect"
-                            type="checkbox"
-                            id="auto_reconnect"
-                            class="mr-2 w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
-                        <label for="auto_reconnect" class="text-sm text-gray-700">启用自动重连</label>
+                    <div class="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+                        <div class="font-medium mb-1">监控模式说明：</div>
+                        <ul class="list-disc list-inside text-xs space-y-1">
+                            <li>开播时自动连接监控</li>
+                            <li>未开播时自动轮询等待</li>
+                            <li>关播后继续等待下次开播</li>
+                            <li>需手动停止监控</li>
+                        </ul>
                     </div>
                 </div>
                 <div class="px-6 py-4 border-t flex justify-end space-x-3">
@@ -301,51 +278,46 @@
             </div>
         </div>
 
-        <!-- 编辑配置模态框 -->
+        <!-- 房间信息模态框 -->
         <div v-if="showEditModal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div class="modal-content bg-white rounded-lg shadow-xl w-full max-w-md">
                 <div class="px-6 py-4 border-b">
-                    <h3 class="text-lg font-bold">编辑监控配置</h3>
+                    <h3 class="text-lg font-bold">房间信息</h3>
                 </div>
                 <div class="px-6 py-4 space-y-4">
-                    <div class="bg-gray-50 p-3 rounded-lg">
-                        <div class="text-sm text-gray-600">直播间: <span class="font-medium" v-text="editRoom.live_id"></span></div>
-                        <div class="text-sm text-gray-600">主播: <span class="font-medium" v-text="editRoom.anchor_name || '未知'"></span></div>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">监控类型</label>
-                        <select
-                            v-model="editRoom.monitor_type"
-                            class="w-full px-3 py-2 border rounded-lg transition-all duration-200 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                            <option value="manual">手动监控</option>
-                            <option value="24h">24小时监控</option>
-                        </select>
-                        <div class="text-xs text-gray-500 mt-1">
-                            手动：主播未开播时停止；24小时：等待开播后自动开始
+                    <div class="bg-gray-50 p-4 rounded-lg space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-600">直播间ID:</span>
+                            <span class="text-sm font-medium" v-text="editRoom.live_id"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-600">主播:</span>
+                            <span class="text-sm font-medium" v-text="editRoom.anchor_name || '未知'"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-600">监控状态:</span>
+                            <span :class="['text-xs px-2 py-1 rounded-full', getMonitorStatusClass(editRoom)]" v-text="getMonitorStatusText(editRoom)"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-600">重连次数:</span>
+                            <span class="text-sm font-medium" v-text="editRoom.reconnect_count || 0"></span>
                         </div>
                     </div>
-                    <div class="flex items-center">
-                        <input
-                            v-model="editRoom.auto_reconnect"
-                            type="checkbox"
-                            id="edit_auto_reconnect"
-                            class="mr-2 w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500">
-                        <label for="edit_auto_reconnect" class="text-sm text-gray-700">启用自动重连</label>
-                    </div>
-                    <div class="text-xs text-gray-500 bg-blue-50 p-2 rounded">
-                        注意：修改配置后，下次启动监控时生效。正在运行的监控不受影响。
+                    <div class="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+                        <div class="font-medium mb-1">监控模式说明：</div>
+                        <ul class="list-disc list-inside text-xs space-y-1">
+                            <li>开播时自动连接监控</li>
+                            <li>未开播时自动轮询等待</li>
+                            <li>关播后继续等待下次开播</li>
+                            <li>需手动停止监控</li>
+                        </ul>
                     </div>
                 </div>
-                <div class="px-6 py-4 border-t flex justify-end space-x-3">
+                <div class="px-6 py-4 border-t flex justify-end">
                     <button
                         @click="closeEditModal"
-                        class="px-4 py-2 border border-gray-300 rounded-lg font-medium transition-all duration-200 hover:bg-gray-100 hover:border-gray-400 active:bg-gray-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2">
-                        取消
-                    </button>
-                    <button
-                        @click="saveRoomConfig"
-                        class="px-4 py-2 bg-indigo-500 text-white rounded-lg font-medium shadow-sm transition-all duration-200 hover:bg-indigo-600 hover:shadow-md active:scale-95 active:shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2">
-                        保存
+                        class="px-4 py-2 bg-gray-500 text-white rounded-lg font-medium shadow-sm transition-all duration-200 hover:bg-gray-600 hover:shadow-md active:scale-95 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2">
+                        关闭
                     </button>
                 </div>
             </div>

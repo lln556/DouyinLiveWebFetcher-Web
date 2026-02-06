@@ -9,21 +9,18 @@ const app = new Vue({
         showProxyModal: false,
         showEditModal: false,
         newRoom: {
-            live_id: '',
-            monitor_type: 'manual',
-            auto_reconnect: false
+            live_id: ''
         },
         editRoom: {
             live_id: '',
             anchor_name: '',
-            monitor_type: 'manual',
-            auto_reconnect: false
+            status: '',
+            reconnect_count: 0
         },
         rooms: [],
         stats: {
             total_rooms: 0,
             monitoring_rooms: 0,
-            h24_rooms: 0,
             stopped_rooms: 0
         },
         proxy: {
@@ -77,9 +74,7 @@ const app = new Vue({
         openAddModal() {
             this.showAddModal = true;
             this.newRoom = {
-                live_id: '',
-                monitor_type: 'manual',
-                auto_reconnect: false
+                live_id: ''
             };
         },
         closeAddModal() {
@@ -96,36 +91,12 @@ const app = new Vue({
             this.editRoom = {
                 live_id: room.live_id,
                 anchor_name: room.anchor_name,
-                monitor_type: room.monitor_type,
-                auto_reconnect: room.auto_reconnect
+                status: room.status,
+                reconnect_count: room.reconnect_count || 0
             };
         },
         closeEditModal() {
             this.showEditModal = false;
-        },
-        async saveRoomConfig() {
-            try {
-                const response = await fetch(`/api/rooms/${this.editRoom.live_id}/config`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        monitor_type: this.editRoom.monitor_type,
-                        auto_reconnect: this.editRoom.auto_reconnect
-                    })
-                });
-                const data = await response.json();
-
-                if (response.ok) {
-                    this.closeEditModal();
-                    this.loadRooms();
-                    this.loadStats();
-                    alert('配置已更新，下次启动监控时生效');
-                } else {
-                    alert(data.error || '更新失败');
-                }
-            } catch (error) {
-                alert('更新失败: ' + error.message);
-            }
         },
         async updateProxyConfig() {
             try {

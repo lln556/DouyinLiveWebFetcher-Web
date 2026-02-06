@@ -126,36 +126,25 @@ class MonitoredRoom:
                     self.manager.data_service.update_live_room_status(
                         self.live_id,
                         'offline',
-                        '主播未开播'
+                        '主播未开播，等待开播中...'
                     )
                     self.manager.data_service.log_system_event(
                         self.live_id,
                         'not_live',
-                        '检测到主播未开播',
+                        '检测到主播未开播，进入轮询模式',
                         anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
                     )
 
-                    # 根据监控类型决定下一步操作
-                    room = self.manager.data_service.get_live_room(self.live_id)
-                    if room and room.monitor_type == '24h' and room.auto_reconnect:
-                        # 24小时监控：进入轮询模式
-                        logger.info(f"房间 {self.live_id} 为24小时监控，进入轮询模式")
-                        if self._poll_room_status():
-                            # 检测到开播，重置重连次数并继续
-                            self.reconnect_count = 0
-                            self.manager.data_service.update_live_room_reconnect(self.live_id, 0)
-                            continue
-                        else:
-                            # 轮询超时或被中断
-                            break
+                    # 进入轮询模式，等待主播开播
+                    logger.info(f"房间 {self.live_id} 进入轮询模式，等待主播开播")
+                    if self._poll_room_status():
+                        # 检测到开播，重置重连次数并继续
+                        self.reconnect_count = 0
+                        self.manager.data_service.update_live_room_reconnect(self.live_id, 0)
+                        continue
                     else:
-                        # 手动监控：直接停止
-                        logger.info(f"房间 {self.live_id} 为手动监控，停止监控")
-                        self.manager.data_service.update_live_room_status(
-                            self.live_id,
-                            'stopped',
-                            '主播未开播，停止监控'
-                        )
+                        # 被手动停止
+                        logger.info(f"房间 {self.live_id} 轮询被手动停止，退出监控")
                         break
                 else:
                     # 更新状态为监控中
@@ -250,17 +239,16 @@ class MonitoredRoom:
 
     def _poll_room_status(self) -> bool:
         """
-        轮询直播间状态，等待主播开播
-        :return: True 表示检测到开播，False 表示被中断或应该停止
+        轮询直播间状态，等待主播开播（无限轮询直到开播或手动停止）
+        :return: True 表示检测到开播，False 表示被手动停止
         """
         from crawler import DouyinLiveWebFetcher
 
-        logger.info(f"房间 {self.live_id} 开始轮询直播状态")
+        logger.info(f"房间 {self.live_id} 开始轮询直播状态（等待主播开播）")
 
         poll_count = 0
-        max_poll_attempts = 10  # 最多轮询10次（10分钟），避免无限等待
 
-        while not self.shutdown_event.is_set() and poll_count < max_poll_attempts:
+        while not self.shutdown_event.is_set():
             try:
                 # 创建临时 fetcher 用于检测状态
                 temp_fetcher = DouyinLiveWebFetcher(self.live_id)
@@ -278,7 +266,7 @@ class MonitoredRoom:
                     return True
                 else:
                     poll_count += 1
-                    logger.debug(f"房间 {self.live_id} 未开播，继续等待... ({poll_count}/{max_poll_attempts})")
+                    logger.info(f"房间 {self.live_id} 未开播，继续等待... (第{poll_count}次检测)")
 
             except Exception as e:
                 logger.debug(f"房间 {self.live_id} 轮询状态时出错: {e}")
@@ -287,26 +275,12 @@ class MonitoredRoom:
             poll_interval = apply_jitter(config.MONITOR_STATUS_POLL_INTERVAL)
             for _ in range(poll_interval):
                 if self.shutdown_event.is_set():
+                    logger.info(f"房间 {self.live_id} 轮询被手动停止")
                     return False
                 time.sleep(1)
 
-        # 达到最大轮询次数仍未检测到开播，停止监控
-        logger.warning(f"房间 {self.live_id} 轮询超时（{max_poll_attempts}次），停止监控")
-
-        # 结束当前直播场次（如果存在）
-        self.end_current_session(reason=f"轮询超时（{max_poll_attempts}次未检测到开播）")
-
-        self.manager.data_service.update_live_room_status(
-            self.live_id,
-            'stopped',
-            '轮询超时，未检测到开播'
-        )
-        self.manager.data_service.log_system_event(
-            self.live_id,
-            'poll_timeout',
-            f'轮询超时（{max_poll_attempts}次），停止监控',
-            anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
-        )
+        # 被手动停止
+        logger.info(f"房间 {self.live_id} 轮询被手动停止")
         return False
 
     def should_reconnect(self) -> bool:
@@ -532,12 +506,12 @@ class RoomManager:
         except Exception as e:
             logger.error(f"清理未结束场次失败: {e}")
 
-    def add_room(self, live_id: str, monitor_type: str = 'manual', auto_reconnect: bool = False) -> Optional[str]:
+    def add_room(self, live_id: str, monitor_type: str = '24h', auto_reconnect: bool = True) -> Optional[str]:
         """
         添加监控房间
         :param live_id: 直播间ID
-        :param monitor_type: 监控类型 (24h/manual)
-        :param auto_reconnect: 是否自动重连
+        :param monitor_type: 监控类型 (默认为 24h，参数保留以兼容旧版)
+        :param auto_reconnect: 是否自动重连 (默认为 True，参数保留以兼容旧版)
         :return: 直播间ID，失败返回None
         """
         with self.lock:

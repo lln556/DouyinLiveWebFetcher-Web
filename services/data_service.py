@@ -98,14 +98,12 @@ class DataService:
             session.close()
 
     def get_24h_monitor_rooms(self) -> List[LiveRoom]:
-        """获取所有24小时监控的房间"""
+        """获取所有24小时监控的房间（现在默认所有房间都是24小时监控）"""
         session = self.get_session()
         try:
+            # 获取所有房间，因为现在默认都是24小时监控
             return session.query(LiveRoom).filter(
-                and_(
-                    LiveRoom.monitor_type == '24h',
-                    LiveRoom.auto_reconnect == True
-                )
+                LiveRoom.auto_reconnect == True
             ).all()
         finally:
             session.close()
