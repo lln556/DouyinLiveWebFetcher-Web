@@ -590,13 +590,9 @@ class WebDouyinLiveFetcher:
                 self.log.info(f"结束直播场次: session_id={session_id}, 峰值观看人数={self.max_viewer_count}, 原因={reason}")
 
                 # 获取刚结束的场次数据，推送给前端
-                from sqlalchemy import create_engine
-                from sqlalchemy.orm import sessionmaker
                 from models.database import LiveSession
 
-                engine = create_engine(data_service.database_url)
-                Session = sessionmaker(bind=engine)
-                db_session = Session()
+                db_session = data_service.get_session()
                 try:
                     session = db_session.query(LiveSession).filter(LiveSession.id == session_id).first()
                     if session:
