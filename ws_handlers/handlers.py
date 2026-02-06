@@ -121,8 +121,8 @@ class WebDouyinLiveFetcher:
                     session_contributors = data_service.get_session_contributors(self.live_id, current_session.id, limit=1000)
                     for contributor in session_contributors:
                         self.monitored_room.user_contributions[contributor['user_id']] = {
-                            'user_name': contributor['user_name'],
-                            'score': contributor['total_score'],
+                            'user_name': contributor['nickname'],
+                            'score': contributor['contribution_value'],
                             'avatar': contributor['user_avatar'],
                             'gift_count': contributor['gift_count']
                         }
@@ -679,8 +679,8 @@ class WebDouyinLiveFetcher:
                 for contributor in session_contributors:
                     # get_session_contributors 返回的是 Dict，使用字典访问
                     self.monitored_room.user_contributions[contributor['user_id']] = {
-                        'user_name': contributor['user_name'],
-                        'score': contributor['total_score'],
+                        'user_name': contributor['nickname'],
+                        'score': contributor['contribution_value'],
                         'avatar': contributor['user_avatar'],
                         'gift_count': contributor['gift_count']
                     }
