@@ -37,6 +37,10 @@ services:
       # 日志
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
+      # 映射代码目录 (支持热更新)
+      - .:/app
+      # 保护容器内的虚拟环境不被覆盖
+      - /app/.venv
       # 持久化数据目录
       - ./data:/app/data
       # 持久化日志目录
@@ -68,8 +72,8 @@ services:
       - mysql_data:/var/lib/mysql
       # 初始化脚本 (可选)
       - ./docker/mysql/init:/docker-entrypoint-initdb.d
-      # 自定义配置 (可选)
-      - ./docker/mysql/conf.d:/etc/mysql/conf.d
+      # 自定义配置已注释 - 依赖 command 参数配置
+      # - ./docker/mysql/conf.d:/etc/mysql/conf.d
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci

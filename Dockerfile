@@ -1,14 +1,17 @@
 # 抖音直播监控平台 Dockerfile
-# 多阶段构建优化镜像大小
+# 使用 uv 管理 Python 依赖
 
 # ==================== 构建阶段 ====================
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # 设置环境变量
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+# 从官方镜像复制 uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # 安装构建依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -17,14 +20,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建虚拟环境
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+WORKDIR /app
 
-# 复制并安装依赖
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# 复制依赖文件
+COPY pyproject.toml uv.lock* ./
+
+# 使用 uv 创建虚拟环境并安装依赖
+RUN uv sync --frozen --no-dev --no-install-project
 
 # ==================== 运行阶段 ====================
 FROM python:3.11-slim
@@ -33,41 +35,29 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TZ=Asia/Shanghai \
-    # 应用配置
     DEBUG=False \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=INFO \
+    PATH="/app/.venv/bin:$PATH"
 
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Node.js 用于 PyExecJS
     nodejs \
-    # 时区设置
     tzdata \
-    # 健康检查
     curl \
     && rm -rf /var/lib/apt/lists/* \
-    # 设置时区
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# 从构建阶段复制虚拟环境
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# 创建非 root 用户
-RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
 # 设置工作目录
 WORKDIR /app
 
+# 从构建阶段复制虚拟环境
+COPY --from=builder /app/.venv /app/.venv
+
 # 复制应用代码
-COPY --chown=appuser:appgroup . .
+COPY . .
 
 # 创建必要的目录
-RUN mkdir -p /app/data /app/logs && \
-    chown -R appuser:appgroup /app/data /app/logs
-
-# 切换到非 root 用户
-USER appuser
+RUN mkdir -p /app/data /app/logs
 
 # 暴露端口
 EXPOSE 7654

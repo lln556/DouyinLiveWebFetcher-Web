@@ -3,25 +3,38 @@ name = "douyin-live-monitor"
 version = "1.0.0"
 description = "抖音直播间实时监控平台"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 authors = [
     { name = "axis" }
 ]
 dependencies = [
-    "requests>=2.31.0",
-    "betterproto==2.0.0b6",
-    "websocket-client>=1.7.0",
-    "PyExecJS>=1.5.1",
-    "mini_racer>=0.12.4",
+    # Flask Web 框架
     "Flask>=3.0.0",
     "Flask-SocketIO>=5.3.6",
     "python-socketio>=5.10.0",
+    "Werkzeug>=3.0.1",
+    # 数据库
     "SQLAlchemy>=2.0.23",
     "pymysql>=1.1.0",
+    # 定时任务
     "APScheduler>=3.10.4",
-    "Werkzeug>=3.0.1",
+    # HTTP 请求
+    "requests>=2.31.0",
+    # WebSocket
+    "websocket-client>=1.7.0",
+    # JavaScript 执行 (签名生成)
+    "mini_racer>=0.12.4",
+    "PyExecJS>=1.5.1",
+    # Protobuf 解析
+    "betterproto==2.0.0b6",
+    "protobuf>=4.24.0",
+    # 日志
     "loguru>=0.7.3",
+    # 环境变量
     "python-dotenv>=1.0.1",
+    # 异步支持
+    "gevent>=23.9.0",
+    "gevent-websocket>=0.10.1",
 ]
 
 [dependency-groups]
