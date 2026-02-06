@@ -115,7 +115,8 @@
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">直播间ID</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">主播名称</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">监控状态</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">直播状态</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">监控类型</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">自动重连</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">重连次数</th>
@@ -124,7 +125,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         <tr v-if="rooms.length === 0">
-                            <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                            <td colspan="8" class="px-6 py-8 text-center text-gray-500">
                                 暂无监控房间，点击上方按钮添加
                             </td>
                         </tr>
@@ -136,8 +137,13 @@
                                 <span v-text="room.anchor_name || '-'"></span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span :class="['px-2 py-1 text-xs rounded-full', getStatusClass(room.status)]">
-                                    <span v-text="getStatusText(room.status)"></span>
+                                <span :class="['px-2 py-1 text-xs rounded-full', getMonitorStatusClass(room)]">
+                                    <span v-text="getMonitorStatusText(room)"></span>
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span :class="['px-2 py-1 text-xs rounded-full', getLiveStatusClass(room.live_status)]">
+                                    <span v-text="getLiveStatusText(room.live_status)"></span>
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
@@ -163,13 +169,13 @@
                                     编辑
                                 </button>
                                 <button
-                                    v-if="room.status !== 'monitoring'"
+                                    v-if="!getIsMonitoring(room)"
                                     @click="startRoom(room.live_id)"
                                     class="text-green-600 hover:text-green-800 hover:underline font-medium mr-3 transition-all duration-150 active:opacity-70">
                                     启动
                                 </button>
                                 <button
-                                    v-if="room.status === 'monitoring'"
+                                    v-if="getIsMonitoring(room)"
                                     @click="stopRoom(room.live_id)"
                                     class="text-yellow-600 hover:text-yellow-800 hover:underline font-medium mr-3 transition-all duration-150 active:opacity-70">
                                     停止

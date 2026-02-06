@@ -32,21 +32,31 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
 
             result = []
             for room in rooms:
+                # 获取活跃状态
+                stats = {}
+                is_active = False
+                if room.live_id in active_status:
+                    is_active = active_status[room.live_id]['is_active']
+                    stats = active_status[room.live_id]['stats']
+
+                # 判断直播状态：有人在线即为直播中
+                live_status = 'live' if stats.get('current_user_count', 0) > 0 else 'offline'
+
                 room_dict = {
                     'live_id': room.live_id,
                     'anchor_name': room.anchor_name,
                     'anchor_id': room.anchor_id,
-                    'status': room.status,
+                    'monitor_status': room.status,  # 监控状态: monitoring/stopped/error
+                    'live_status': live_status,  # 直播状态: live/offline
+                    'status': room.status,  # 兼容旧版
                     'monitor_type': room.monitor_type,
                     'auto_reconnect': room.auto_reconnect,
                     'reconnect_count': room.reconnect_count,
                     'created_at': room.created_at.isoformat() if room.created_at else None,
                     'updated_at': room.updated_at.isoformat() if room.updated_at else None,
+                    'is_active': is_active,
+                    'stats': stats
                 }
-
-                # 添加活跃状态
-                if room.live_id in active_status:
-                    room_dict.update(active_status[room.live_id])
 
                 result.append(room_dict)
 

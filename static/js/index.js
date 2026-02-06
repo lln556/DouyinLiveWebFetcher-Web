@@ -229,21 +229,44 @@ const app = new Vue({
             window.location.href = `/room/${liveId}`;
         },
         getStatusClass(status) {
+            // 兼容旧版，使用 monitor_status
+            return this.getMonitorStatusClass(status);
+        },
+        getStatusText(status) {
+            // 兼容旧版，使用 monitor_status
+            return this.getMonitorStatusText(status);
+        },
+        getMonitorStatusClass(room) {
+            // 只要监控线程在运行就是监控中（绿色）
+            if (room.is_active === true) {
+                return 'bg-green-100 text-green-800';
+            }
+            // 否则显示已停止（灰色）
+            return 'bg-gray-100 text-gray-800';
+        },
+        getMonitorStatusText(room) {
+            // 只要监控线程在运行就是监控中
+            if (room.is_active === true) {
+                return '监控中';
+            }
+            return '已停止';
+        },
+        getIsMonitoring(room) {
+            // 判断是否正在监控：监控线程运行中
+            return room.is_active === true;
+        },
+        getLiveStatusClass(status) {
             switch (status) {
-                case 'monitoring': return 'bg-green-100 text-green-800';
-                case 'stopped': return 'bg-gray-100 text-gray-800';
-                case 'error': return 'bg-red-100 text-red-800';
-                case 'offline': return 'bg-yellow-100 text-yellow-800';
+                case 'live': return 'bg-green-100 text-green-800';
+                case 'offline': return 'bg-gray-100 text-gray-800';
                 default: return 'bg-gray-100 text-gray-800';
             }
         },
-        getStatusText(status) {
+        getLiveStatusText(status) {
             switch (status) {
-                case 'monitoring': return '监控中';
-                case 'stopped': return '已停止';
-                case 'error': return '错误';
+                case 'live': return '直播中';
                 case 'offline': return '离线';
-                default: return status;
+                default: return '未知';
             }
         },
         formatIncome(value) {
