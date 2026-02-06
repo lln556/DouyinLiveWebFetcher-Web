@@ -566,14 +566,19 @@ class WebDouyinLiveFetcher:
                     'peak_viewer_count': session.peak_viewer_count
                 }
 
+        # 获取最新房间状态
+        room = data_service.get_live_room(self.live_id)
+        room_status = room.status if room else None
+
         # 通过Socket.IO推送到前端
         self.socketio.emit(f'room_{self.live_id}_stats', {
+            'room_status': room_status,  # 新增：监控状态
             'current_user_count': self.monitored_room.stats['current_user_count'],
             'total_user_count': self.monitored_room.stats['total_user_count'],
             'total_income': self.monitored_room.stats['total_income'],
             'contributor_count': self.monitored_room.stats['contributor_count'],
             'contributor_info': rank_list,
-            'current_session': current_session_data  # 添加当前场次数据
+            'current_session': current_session_data
         }, room=f'room_{self.live_id}')
         self.log.debug(f"发送直播间统计: 当前{current}, 累计{total}, 总收入{self.total_income}, 贡献者数{len(self.monitored_room.user_contributions)}")
 
@@ -607,8 +612,13 @@ class WebDouyinLiveFetcher:
                             'peak_viewer_count': session.peak_viewer_count
                         }
 
+                        # 获取最新房间状态
+                        room = data_service.get_live_room(self.live_id)
+                        room_status = room.status if room else None
+
                         # 推送状态更新给前端
                         self.socketio.emit(f'room_{self.live_id}_stats', {
+                            'room_status': room_status,  # 新增：监控状态
                             'current_user_count': self.monitored_room.stats['current_user_count'],
                             'total_user_count': self.monitored_room.stats['total_user_count'],
                             'total_income': self.monitored_room.stats['total_income'],

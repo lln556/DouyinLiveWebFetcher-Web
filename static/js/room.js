@@ -206,6 +206,11 @@ const app = new Vue({
             });
 
             this.socket.on(`room_${this.liveId}_stats`, (data) => {
+                // 实时更新监控状态
+                if (data.room_status && this.room) {
+                    this.room.status = data.room_status;
+                }
+
                 this.stats = {
                     currentUserCount: data.current_user_count || 0,
                     totalUserCount: data.total_user_count || 0,

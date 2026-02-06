@@ -340,7 +340,12 @@ class MonitoredRoom:
 
                         # 推送状态更新给前端
                         if self.socketio:
+                            # 获取最新房间状态
+                            room = self.manager.data_service.get_live_room(self.live_id)
+                            room_status = room.status if room else None
+
                             self.socketio.emit(f'room_{self.live_id}_stats', {
+                                'room_status': room_status,  # 新增：监控状态
                                 'current_user_count': self.stats['current_user_count'],
                                 'total_user_count': self.stats['total_user_count'],
                                 'total_income': self.stats['total_income'],
