@@ -40,6 +40,13 @@ MONITOR_MAX_RETRIES = int(os.getenv('MONITOR_MAX_RETRIES', '5'))  # 最大重试
 MONITOR_RECONNECT_DELAY = int(os.getenv('MONITOR_RECONNECT_DELAY', '30'))  # 重连延迟(秒)
 MONITOR_STATUS_POLL_INTERVAL = int(os.getenv('MONITOR_STATUS_POLL_INTERVAL', '60'))  # 轮询直播状态间隔(秒)
 
+# 防风控配置
+ANTI_DETECTION_ENABLED = os.getenv('ANTI_DETECTION_ENABLED', 'True') == 'True'  # 是否启用防风控机制
+ANTI_DETECTION_THREAD_START_INTERVAL = int(os.getenv('ANTI_DETECTION_THREAD_START_INTERVAL', '3'))  # 线程启动间隔(秒)
+ANTI_DETECTION_QUEUE_READ_DELAY = int(os.getenv('ANTI_DETECTION_QUEUE_READ_DELAY', '2'))  # 排队读取网址时间(秒)
+ANTI_DETECTION_JITTER_ENABLED = os.getenv('ANTI_DETECTION_JITTER_ENABLED', 'True') == 'True'  # 启用检测周期抖动
+ANTI_DETECTION_JITTER_RANGE = int(os.getenv('ANTI_DETECTION_JITTER_RANGE', '5'))  # 抖动范围(+/-秒)
+
 # 数据保留配置
 DATA_RETENTION_DAYS = int(os.getenv('DATA_RETENTION_DAYS', '90'))  # 数据保留天数，0表示永久保留
 

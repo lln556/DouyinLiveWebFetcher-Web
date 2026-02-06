@@ -374,6 +374,10 @@ class DouyinLiveWebFetcher:
                 self.log.warning("无法获取 roomId，直播间可能已结束")
                 return False
 
+            # 添加防风控排队读取延迟
+            if config.ANTI_DETECTION_ENABLED and config.ANTI_DETECTION_QUEUE_READ_DELAY > 0:
+                time.sleep(config.ANTI_DETECTION_QUEUE_READ_DELAY)
+
             msToken = generateMsToken()
             nonce = self.get_ac_nonce()
             signature = self.get_ac_signature(nonce)
@@ -542,26 +546,27 @@ class DouyinLiveWebFetcher:
             ws.send(ack, websocket.ABNF.OPCODE_BINARY)
 
         # 根据消息类别解析消息体
-        for msg in response.messages_list:
-            method = msg.method
-            try:
-                {
-                    'WebcastChatMessage': self._parseChatMsg,  # 聊天消息
-                    'WebcastGiftMessage': self._parseGiftMsg,  # 礼物消息
-                    'WebcastLikeMessage': self._parseLikeMsg,  # 点赞消息
-                    'WebcastMemberMessage': self._parseMemberMsg,  # 进入直播间消息
-                    'WebcastSocialMessage': self._parseSocialMsg,  # 关注消息
-                    'WebcastRoomUserSeqMessage': self._parseRoomUserSeqMsg,  # 直播间统计
-                    'WebcastFansclubMessage': self._parseFansclubMsg,  # 粉丝团消息
-                    'WebcastControlMessage': self._parseControlMsg,  # 直播间状态消息
-                    'WebcastEmojiChatMessage': self._parseEmojiChatMsg,  # 聊天表情包消息
-                    'WebcastRoomStatsMessage': self._parseRoomStatsMsg,  # 直播间统计信息
-                    'WebcastRoomMessage': self._parseRoomMsg,  # 直播间信息
-                    'WebcastRoomRankMessage': self._parseRankMsg,  # 直播间排行榜信息
-                    'WebcastRoomStreamAdaptationMessage': self._parseRoomStreamAdaptationMsg,  # 直播间流配置
-                }.get(method)(msg.payload)
-            except Exception:
-                pass
+        if response.messages_list:
+            for msg in response.messages_list:
+                method = msg.method
+                try:
+                    {
+                        'WebcastChatMessage': self._parseChatMsg,  # 聊天消息
+                        'WebcastGiftMessage': self._parseGiftMsg,  # 礼物消息
+                        'WebcastLikeMessage': self._parseLikeMsg,  # 点赞消息
+                        'WebcastMemberMessage': self._parseMemberMsg,  # 进入直播间消息
+                        'WebcastSocialMessage': self._parseSocialMsg,  # 关注消息
+                        'WebcastRoomUserSeqMessage': self._parseRoomUserSeqMsg,  # 直播间统计
+                        'WebcastFansclubMessage': self._parseFansclubMsg,  # 粉丝团消息
+                        'WebcastControlMessage': self._parseControlMsg,  # 直播间状态消息
+                        'WebcastEmojiChatMessage': self._parseEmojiChatMsg,  # 聊天表情包消息
+                        'WebcastRoomStatsMessage': self._parseRoomStatsMsg,  # 直播间统计信息
+                        'WebcastRoomMessage': self._parseRoomMsg,  # 直播间信息
+                        'WebcastRoomRankMessage': self._parseRankMsg,  # 直播间排行榜信息
+                        'WebcastRoomStreamAdaptationMessage': self._parseRoomStreamAdaptationMsg,  # 直播间流配置
+                    }.get(method)(msg.payload)
+                except Exception:
+                    pass
 
     def _wsOnError(self, ws, error):
         self.log.error(f"WebSocket错误: {error}")

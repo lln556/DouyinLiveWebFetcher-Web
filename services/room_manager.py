@@ -10,6 +10,7 @@ import config
 from services.data_service import DataService
 from models.database import LiveRoom, get_china_now
 from utils.logger import get_logger
+from utils import apply_jitter
 
 logger = get_logger("room_manager")
 
@@ -282,8 +283,9 @@ class MonitoredRoom:
             except Exception as e:
                 logger.debug(f"房间 {self.live_id} 轮询状态时出错: {e}")
 
-            # 等待指定间隔后再次检测
-            for _ in range(config.MONITOR_STATUS_POLL_INTERVAL):
+            # 等待指定间隔后再次检测（应用抖动）
+            poll_interval = apply_jitter(config.MONITOR_STATUS_POLL_INTERVAL)
+            for _ in range(poll_interval):
                 if self.shutdown_event.is_set():
                     return False
                 time.sleep(1)
@@ -577,6 +579,10 @@ class RoomManager:
                 )
                 self.active_rooms[live_id] = monitored_room
                 logger.info(f"重新创建监控房间实例: live_id={live_id}")
+
+            # 添加防风控启动延迟
+            if config.ANTI_DETECTION_ENABLED and config.ANTI_DETECTION_THREAD_START_INTERVAL > 0:
+                time.sleep(config.ANTI_DETECTION_THREAD_START_INTERVAL)
 
             monitored_room.start()
             return True

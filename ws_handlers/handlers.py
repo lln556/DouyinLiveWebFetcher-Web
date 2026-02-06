@@ -158,19 +158,20 @@ class WebDouyinLiveFetcher:
                 ws.send(ack, websocket.ABNF.OPCODE_BINARY)
 
             # 处理消息列表
-            for msg in response.messages_list:
-                method = msg.method
-                try:
-                    if method == 'WebcastChatMessage':
-                        self._handle_chat_message(ChatMessage().parse(msg.payload))
-                    elif method == 'WebcastGiftMessage':
-                        self._handle_gift_message(GiftMessage().parse(msg.payload))
-                    elif method == 'WebcastRoomUserSeqMessage':
-                        self._handle_stats_message(RoomUserSeqMessage().parse(msg.payload))
-                    elif method == 'WebcastControlMessage':
-                        self._handle_control_message(ControlMessage().parse(msg.payload))
-                except Exception as e:
-                    self.log.error(f"处理消息出错 [method={method}]: {e}")
+            if response.messages_list:
+                for msg in response.messages_list:
+                    method = msg.method
+                    try:
+                        if method == 'WebcastChatMessage':
+                            self._handle_chat_message(ChatMessage().parse(msg.payload))
+                        elif method == 'WebcastGiftMessage':
+                            self._handle_gift_message(GiftMessage().parse(msg.payload))
+                        elif method == 'WebcastRoomUserSeqMessage':
+                            self._handle_stats_message(RoomUserSeqMessage().parse(msg.payload))
+                        elif method == 'WebcastControlMessage':
+                            self._handle_control_message(ControlMessage().parse(msg.payload))
+                    except Exception as e:
+                        self.log.error(f"处理消息出错 [method={method}]: {e}")
         except Exception as e:
             self.log.error(f"解析消息出错: {e}")
 
