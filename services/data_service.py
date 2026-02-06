@@ -251,11 +251,29 @@ class DataService:
         finally:
             session.close()
 
-    def get_all_messages(self, live_id: str, limit: int = 100) -> List[Dict]:
+    def get_message_counts(self, live_id: str) -> Dict[str, int]:
+        """获取消息总数"""
+        session = self.get_session()
+        try:
+            chat_count = session.query(func.count(ChatMessage.id)).filter(
+                ChatMessage.live_id == live_id
+            ).scalar() or 0
+            gift_count = session.query(func.count(GiftMessage.id)).filter(
+                GiftMessage.live_id == live_id
+            ).scalar() or 0
+            return {
+                'chat_count': chat_count,
+                'gift_count': gift_count,
+                'total_count': chat_count + gift_count
+            }
+        finally:
+            session.close()
+
+    def get_all_messages(self, live_id: str, limit: int = 100, offset: int = 0) -> List[Dict]:
         """获取所有消息（弹幕和礼物混合）"""
         session = self.get_session()
         try:
-            # 使用原生SQL查询合并两种消息
+            # 使用原生SQL查询合并两种消息，支持分页
             sql = text("""
                 SELECT 'chat' as type, id, user_name, user_level, content as display_content,
                        NULL as gift_name, NULL as gift_count, NULL as total_value, created_at
@@ -268,9 +286,9 @@ class DataService:
                 FROM gift_messages
                 WHERE live_id = :live_id
                 ORDER BY created_at DESC
-                LIMIT :limit
+                LIMIT :limit OFFSET :offset
             """)
-            result = session.execute(sql, {'live_id': live_id, 'limit': limit})
+            result = session.execute(sql, {'live_id': live_id, 'limit': limit, 'offset': offset})
             # SQLAlchemy 2.0 兼容方式转换 Row 为 Dict
             return [row._asdict() if hasattr(row, '_asdict') else dict(row._mapping) for row in result]
         finally:
@@ -449,14 +467,14 @@ class DataService:
         finally:
             session.close()
 
-    def get_session_messages(self, session_id: int, message_type: str = 'chat', limit: int = 100) -> List[Dict]:
+    def get_session_messages(self, session_id: int, message_type: str = 'chat', limit: int = 100, offset: int = 0) -> List[Dict]:
         """获取指定直播场次的弹幕或礼物消息"""
         session = self.get_session()
         try:
             if message_type == 'chat':
                 messages = session.query(ChatMessage).filter(
                     ChatMessage.live_session_id == session_id
-                ).order_by(ChatMessage.created_at.desc()).limit(limit).all()
+                ).order_by(ChatMessage.created_at.desc()).offset(offset).limit(limit).all()
 
                 return [{
                     'id': msg.id,
@@ -470,7 +488,7 @@ class DataService:
             elif message_type == 'gift':
                 messages = session.query(GiftMessage).filter(
                     GiftMessage.live_session_id == session_id
-                ).order_by(GiftMessage.created_at.desc()).limit(limit).all()
+                ).order_by(GiftMessage.created_at.desc()).offset(offset).limit(limit).all()
 
                 return [{
                     'id': msg.id,
@@ -485,6 +503,23 @@ class DataService:
                 } for msg in messages]
 
             return []
+        finally:
+            session.close()
+
+    def get_session_message_counts(self, session_id: int) -> Dict[str, int]:
+        """获取场次消息总数"""
+        session = self.get_session()
+        try:
+            chat_count = session.query(func.count(ChatMessage.id)).filter(
+                ChatMessage.live_session_id == session_id
+            ).scalar() or 0
+            gift_count = session.query(func.count(GiftMessage.id)).filter(
+                GiftMessage.live_session_id == session_id
+            ).scalar() or 0
+            return {
+                'chat_count': chat_count,
+                'gift_count': gift_count
+            }
         finally:
             session.close()
 

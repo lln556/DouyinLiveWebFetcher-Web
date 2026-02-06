@@ -259,51 +259,125 @@
                     <div class="border-b mb-4">
                         <div class="flex gap-4">
                             <button
-                                v-for="tab in ['chats', 'gifts', 'contributors']"
-                                :key="tab"
-                                @click="sessionDetailTab = tab"
-                                :class="['tab-btn', { active: sessionDetailTab === tab }]">
-                                {{ tab === 'chats' ? '弹幕记录' : tab === 'gifts' ? '礼物记录' : '贡献榜' }}
+                                @click="loadSessionDetailTab('chats')"
+                                :class="['tab-btn', { active: sessionDetailTab === 'chats' }]">
+                                弹幕记录
+                                <span class="ml-1 text-xs text-gray-500" v-text="'(' + sessionDetailCounts.chat_count + ')'"></span>
+                            </button>
+                            <button
+                                @click="loadSessionDetailTab('gifts')"
+                                :class="['tab-btn', { active: sessionDetailTab === 'gifts' }]">
+                                礼物记录
+                                <span class="ml-1 text-xs text-gray-500" v-text="'(' + sessionDetailCounts.gift_count + ')'"></span>
+                            </button>
+                            <button
+                                @click="loadSessionDetailTab('contributors')"
+                                :class="['tab-btn', { active: sessionDetailTab === 'contributors' }]">
+                                贡献榜
                             </button>
                         </div>
                     </div>
 
                     <!-- 弹幕记录 -->
-                    <div v-if="sessionDetailTab === 'chats'" class="max-h-96 overflow-y-auto">
-                        <div v-if="sessionDetailChats.length === 0" class="text-center py-8 text-gray-500">
-                            暂无弹幕记录
-                        </div>
-                        <div v-else class="space-y-2">
-                            <div v-for="chat in sessionDetailChats" :key="chat.id" class="bg-gray-50 rounded p-3">
-                                <div class="flex items-center gap-2">
-                                    <img v-if="chat.user_level" :src="'/level_img/level_' + chat.user_level + '.png'" style="width: 32px; height: 32px; object-fit: contain;">
-                                    <span class="font-medium text-blue-600" v-text="chat.nickname || chat.user_id"></span>
-                                    <span class="text-gray-400 text-sm" v-text="formatDateTime(chat.created_at)"></span>
+                    <div v-if="sessionDetailTab === 'chats'">
+                        <div class="max-h-96 overflow-y-auto">
+                            <div v-if="sessionDetailChats.length === 0" class="text-center py-8 text-gray-500">
+                                暂无弹幕记录
+                            </div>
+                            <div v-else class="space-y-2">
+                                <div v-for="chat in sessionDetailChats" :key="chat.id" class="bg-gray-50 rounded p-3">
+                                    <div class="flex items-center gap-2">
+                                        <img v-if="chat.user_level" :src="'/level_img/level_' + chat.user_level + '.png'" style="width: 32px; height: 32px; object-fit: contain;">
+                                        <span class="font-medium text-blue-600" v-text="chat.nickname || chat.user_id"></span>
+                                        <span class="text-gray-400 text-sm" v-text="formatDateTime(chat.created_at)"></span>
+                                    </div>
+                                    <div class="text-gray-700 mt-1" v-text="chat.content"></div>
                                 </div>
-                                <div class="text-gray-700 mt-1" v-text="chat.content"></div>
+                            </div>
+                        </div>
+                        <!-- 分页控件 -->
+                        <div v-if="sessionDetailPagination.chats.total_pages > 1" class="flex items-center justify-between mt-4 pt-4 border-t">
+                            <div class="text-sm text-gray-500">
+                                共 <span class="font-medium" v-text="sessionDetailPagination.chats.total"></span> 条，
+                                第 <span class="font-medium" v-text="sessionDetailPagination.chats.page"></span> / <span v-text="sessionDetailPagination.chats.total_pages"></span> 页
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button
+                                    @click="goToSessionPage('chat', sessionDetailPagination.chats.page - 1)"
+                                    :disabled="sessionDetailPagination.chats.page <= 1"
+                                    :class="['px-3 py-1 rounded text-sm', sessionDetailPagination.chats.page <= 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']">
+                                    上一页
+                                </button>
+                                <template v-for="p in getSessionPageNumbers('chat')">
+                                    <span v-if="p === '...'" class="px-2 text-gray-400">...</span>
+                                    <button
+                                        v-else
+                                        @click="goToSessionPage('chat', p)"
+                                        :class="['w-8 h-8 rounded text-sm', sessionDetailPagination.chats.page === p ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']"
+                                        v-text="p">
+                                    </button>
+                                </template>
+                                <button
+                                    @click="goToSessionPage('chat', sessionDetailPagination.chats.page + 1)"
+                                    :disabled="sessionDetailPagination.chats.page >= sessionDetailPagination.chats.total_pages"
+                                    :class="['px-3 py-1 rounded text-sm', sessionDetailPagination.chats.page >= sessionDetailPagination.chats.total_pages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']">
+                                    下一页
+                                </button>
                             </div>
                         </div>
                     </div>
 
                     <!-- 礼物记录 -->
-                    <div v-if="sessionDetailTab === 'gifts'" class="max-h-96 overflow-y-auto">
-                        <div v-if="sessionDetailGifts.length === 0" class="text-center py-8 text-gray-500">
-                            暂无礼物记录
-                        </div>
-                        <div v-else class="space-y-2">
-                            <div v-for="gift in sessionDetailGifts" :key="gift.id" class="bg-yellow-50 rounded p-3">
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center gap-2">
-                                        <img v-if="gift.user_level" :src="'/level_img/level_' + gift.user_level + '.png'" style="width: 32px; height: 32px; object-fit: contain;">
-                                        <span class="font-medium text-blue-600" v-text="gift.nickname || gift.user_id"></span>
-                                        <span class="text-gray-400 text-sm" v-text="formatDateTime(gift.created_at)"></span>
+                    <div v-if="sessionDetailTab === 'gifts'">
+                        <div class="max-h-96 overflow-y-auto">
+                            <div v-if="sessionDetailGifts.length === 0" class="text-center py-8 text-gray-500">
+                                暂无礼物记录
+                            </div>
+                            <div v-else class="space-y-2">
+                                <div v-for="gift in sessionDetailGifts" :key="gift.id" class="bg-yellow-50 rounded p-3">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <img v-if="gift.user_level" :src="'/level_img/level_' + gift.user_level + '.png'" style="width: 32px; height: 32px; object-fit: contain;">
+                                            <span class="font-medium text-blue-600" v-text="gift.nickname || gift.user_id"></span>
+                                            <span class="text-gray-400 text-sm" v-text="formatDateTime(gift.created_at)"></span>
+                                        </div>
+                                        <div class="text-yellow-600 font-bold" v-text="gift.diamond_count + ' 钻石'"></div>
                                     </div>
-                                    <div class="text-yellow-600 font-bold" v-text="gift.diamond_count + ' 钻石'"></div>
+                                    <div class="text-gray-700 mt-1">
+                                        送出 <span class="font-semibold text-pink-600" v-text="gift.gift_name"></span>
+                                        <span v-if="gift.combo_count > 1" class="text-sm text-gray-500"> (连击 x{{ gift.combo_count }})</span>
+                                    </div>
                                 </div>
-                                <div class="text-gray-700 mt-1">
-                                    送出 <span class="font-semibold text-pink-600" v-text="gift.gift_name"></span>
-                                    <span v-if="gift.combo_count > 1" class="text-sm text-gray-500"> (连击 x{{ gift.combo_count }})</span>
-                                </div>
+                            </div>
+                        </div>
+                        <!-- 分页控件 -->
+                        <div v-if="sessionDetailPagination.gifts.total_pages > 1" class="flex items-center justify-between mt-4 pt-4 border-t">
+                            <div class="text-sm text-gray-500">
+                                共 <span class="font-medium" v-text="sessionDetailPagination.gifts.total"></span> 条，
+                                第 <span class="font-medium" v-text="sessionDetailPagination.gifts.page"></span> / <span v-text="sessionDetailPagination.gifts.total_pages"></span> 页
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button
+                                    @click="goToSessionPage('gift', sessionDetailPagination.gifts.page - 1)"
+                                    :disabled="sessionDetailPagination.gifts.page <= 1"
+                                    :class="['px-3 py-1 rounded text-sm', sessionDetailPagination.gifts.page <= 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']">
+                                    上一页
+                                </button>
+                                <template v-for="p in getSessionPageNumbers('gift')">
+                                    <span v-if="p === '...'" class="px-2 text-gray-400">...</span>
+                                    <button
+                                        v-else
+                                        @click="goToSessionPage('gift', p)"
+                                        :class="['w-8 h-8 rounded text-sm', sessionDetailPagination.gifts.page === p ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']"
+                                        v-text="p">
+                                    </button>
+                                </template>
+                                <button
+                                    @click="goToSessionPage('gift', sessionDetailPagination.gifts.page + 1)"
+                                    :disabled="sessionDetailPagination.gifts.page >= sessionDetailPagination.gifts.total_pages"
+                                    :class="['px-3 py-1 rounded text-sm', sessionDetailPagination.gifts.page >= sessionDetailPagination.gifts.total_pages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']">
+                                    下一页
+                                </button>
                             </div>
                         </div>
                     </div>

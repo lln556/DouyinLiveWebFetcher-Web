@@ -22,7 +22,24 @@ const app = new Vue({
         historyMessages: [],
         showHistoryModal: false,
         socket: null,
-        maxMessages: 200
+        maxMessages: Infinity,  // 不限制消息数量
+        // 历史记录分页相关
+        history: {
+            messages: [],
+            loading: false,
+            type: 'all',  // all/chat/gift
+            pagination: {
+                total: 0,
+                page: 1,
+                page_size: 50,
+                total_pages: 1
+            },
+            counts: {
+                total_count: 0,
+                chat_count: 0,
+                gift_count: 0
+            }
+        }
     },
     computed: {
         filteredMessages() {
@@ -48,6 +65,7 @@ const app = new Vue({
         this.loadRoomInfo();
         this.loadCurrentSession();
         this.loadHistoryMessages();
+        this.loadSessionContributors();  // 首次加载贡献榜
         this.initSocket();
         console.log('=== Vue mounted 结束 ===');
     },
@@ -144,6 +162,26 @@ const app = new Vue({
                 }
             } catch (error) {
                 console.error('加载贡献榜失败:', error);
+            }
+        },
+        async loadSessionContributors() {
+            // 首次加载当前场次贡献榜，避免等待 Socket.IO 推送
+            try {
+                const response = await fetch(`/api/rooms/${this.liveId}/session-contributors?limit=100`);
+                const data = await response.json();
+
+                if (data.contributors && data.contributors.length > 0) {
+                    // 转换格式为 stats.contributorInfo 需要的格式
+                    this.stats.contributorInfo = data.contributors.map((c, index) => ({
+                        rank: index + 1,
+                        user: c.nickname || c.user_id,
+                        score: c.contribution_value,
+                        avatar: c.user_avatar
+                    }));
+                    this.stats.contributorCount = data.contributors.length;
+                }
+            } catch (error) {
+                console.error('加载场次贡献榜失败:', error);
             }
         },
         initSocket() {
@@ -300,6 +338,100 @@ const app = new Vue({
             if (rank === 2) return 'rank-2';
             if (rank === 3) return 'rank-3';
             return 'rank-other';
+        },
+        // 历史记录相关方法
+        openHistoryModal() {
+            this.showHistoryModal = true;
+            this.history.page = 1;
+            this.history.type = 'all';
+            this.loadHistoryData();
+        },
+        closeHistoryModal() {
+            this.showHistoryModal = false;
+        },
+        async loadHistoryData() {
+            this.history.loading = true;
+            try {
+                const params = new URLSearchParams({
+                    page: this.history.pagination.page,
+                    limit: this.history.pagination.page_size,
+                    type: this.history.type
+                });
+                const response = await fetch(`/api/rooms/${this.liveId}/messages?${params}`);
+                const data = await response.json();
+
+                if (data.messages) {
+                    this.history.messages = data.messages;
+                }
+                if (data.pagination) {
+                    this.history.pagination = data.pagination;
+                }
+                if (data.counts) {
+                    this.history.counts = data.counts;
+                }
+            } catch (error) {
+                console.error('加载历史消息失败:', error);
+            } finally {
+                this.history.loading = false;
+            }
+        },
+        changeHistoryType(type) {
+            this.history.type = type;
+            this.history.pagination.page = 1;
+            this.loadHistoryData();
+        },
+        goToPage(page) {
+            if (page < 1 || page > this.history.pagination.total_pages) return;
+            this.history.pagination.page = page;
+            this.loadHistoryData();
+        },
+        prevPage() {
+            this.goToPage(this.history.pagination.page - 1);
+        },
+        nextPage() {
+            this.goToPage(this.history.pagination.page + 1);
+        },
+        formatHistoryMessage(msg) {
+            if (msg.type === 'gift') {
+                return `${msg.user_name} 赠送了 ${msg.gift_name} x${msg.gift_count}`;
+            } else if (msg.content) {
+                return msg.content;
+            } else if (msg.display_content) {
+                return msg.display_content;
+            }
+            return '';
+        },
+        getHistoryMessageClass(msg) {
+            return msg.type === 'gift' ? 'gift-message' : 'chat-message';
+        },
+        // 计算分页显示的页码范围
+        getPageNumbers() {
+            const current = this.history.pagination.page;
+            const total = this.history.pagination.total_pages;
+            const pages = [];
+
+            if (total <= 7) {
+                for (let i = 1; i <= total; i++) {
+                    pages.push(i);
+                }
+            } else {
+                if (current <= 4) {
+                    for (let i = 1; i <= 5; i++) pages.push(i);
+                    pages.push('...');
+                    pages.push(total);
+                } else if (current >= total - 3) {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = total - 4; i <= total; i++) pages.push(i);
+                } else {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = current - 1; i <= current + 1; i++) pages.push(i);
+                    pages.push('...');
+                    pages.push(total);
+                }
+            }
+            return pages;
         }
     }
 });

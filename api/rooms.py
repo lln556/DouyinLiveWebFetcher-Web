@@ -186,52 +186,69 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
 
     @rooms_bp.route('/<live_id>/messages', methods=['GET'])
     def get_room_messages(live_id):
-        """获取房间消息"""
+        """获取房间消息（支持分页）"""
         try:
-            limit = min(int(request.args.get('limit', 100)), 1000)
-            offset = int(request.args.get('offset', 0))
-            msg_type = request.args.get('type')  # chat/gift/all
+            page_size = min(int(request.args.get('limit', 50)), 1000)
+            page = max(int(request.args.get('page', 1)), 1)
+            offset = int(request.args.get('offset', (page - 1) * page_size))
+            msg_type = request.args.get('type', 'all')  # chat/gift/all
+
+            # 获取消息总数
+            counts = data_service.get_message_counts(live_id)
 
             if msg_type == 'chat':
-                messages = data_service.get_chat_messages(live_id, limit, offset)
-                return jsonify({
-                    'messages': [
-                        {
-                            'id': msg.id,
-                            'live_id': msg.live_id,
-                            'anchor_name': msg.anchor_name,
-                            'user_name': msg.user_name,
-                            'user_level': msg.user_level,
-                            'content': msg.content,
-                            'is_gift_user': msg.is_gift_user,
-                            'created_at': msg.created_at.isoformat() if msg.created_at else None
-                        }
-                        for msg in messages
-                    ]
-                })
+                total = counts['chat_count']
+                messages = data_service.get_chat_messages(live_id, page_size, offset)
+                messages_data = [
+                    {
+                        'id': msg.id,
+                        'type': 'chat',
+                        'live_id': msg.live_id,
+                        'anchor_name': msg.anchor_name,
+                        'user_name': msg.user_name,
+                        'user_level': msg.user_level,
+                        'content': msg.content,
+                        'is_gift_user': msg.is_gift_user,
+                        'created_at': msg.created_at.isoformat() if msg.created_at else None
+                    }
+                    for msg in messages
+                ]
             elif msg_type == 'gift':
-                messages = data_service.get_gift_messages(live_id, limit, offset)
-                return jsonify({
-                    'messages': [
-                        {
-                            'id': msg.id,
-                            'live_id': msg.live_id,
-                            'anchor_name': msg.anchor_name,
-                            'user_name': msg.user_name,
-                            'user_level': msg.user_level,
-                            'gift_name': msg.gift_name,
-                            'gift_count': msg.gift_count,
-                            'gift_price': msg.gift_price,
-                            'total_value': msg.total_value,
-                            'send_type': msg.send_type,
-                            'created_at': msg.created_at.isoformat() if msg.created_at else None
-                        }
-                        for msg in messages
-                    ]
-                })
+                total = counts['gift_count']
+                messages = data_service.get_gift_messages(live_id, page_size, offset)
+                messages_data = [
+                    {
+                        'id': msg.id,
+                        'type': 'gift',
+                        'live_id': msg.live_id,
+                        'anchor_name': msg.anchor_name,
+                        'user_name': msg.user_name,
+                        'user_level': msg.user_level,
+                        'gift_name': msg.gift_name,
+                        'gift_count': msg.gift_count,
+                        'gift_price': msg.gift_price,
+                        'total_value': msg.total_value,
+                        'send_type': msg.send_type,
+                        'created_at': msg.created_at.isoformat() if msg.created_at else None
+                    }
+                    for msg in messages
+                ]
             else:  # all
-                messages = data_service.get_all_messages(live_id, limit)
-                return jsonify({'messages': messages})
+                total = counts['total_count']
+                messages_data = data_service.get_all_messages(live_id, page_size, offset)
+
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+            return jsonify({
+                'messages': messages_data,
+                'pagination': {
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': total_pages
+                },
+                'counts': counts
+            })
         except Exception as e:
             logger.error(f"获取房间消息失败: {e}")
             return jsonify({'error': str(e)}), 500
@@ -485,29 +502,56 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
     def get_session_detail(session_id):
         """获取直播场次详情（弹幕、礼物、贡献榜）"""
         try:
-            limit = min(int(request.args.get('limit', 100)), 500)
-            logger.info(f"获取场次详情: session_id={session_id}, limit={limit}")
+            page_size = min(int(request.args.get('limit', 50)), 200)
+            page = max(int(request.args.get('page', 1)), 1)
+            offset = (page - 1) * page_size
+            msg_type = request.args.get('type', 'chat')  # chat/gift/contributors
+            logger.info(f"获取场次详情: session_id={session_id}, page={page}, page_size={page_size}, type={msg_type}")
 
             # 获取场次基本信息
             session_obj = data_service.get_live_session_stats(session_id)
             if not session_obj:
                 return jsonify({'error': '场次不存在'}), 404
 
-            # 获取场次弹幕记录
-            chats = data_service.get_session_messages(session_id, 'chat', limit)
+            # 获取消息总数
+            counts = data_service.get_session_message_counts(session_id)
 
-            # 获取场次礼物记录
-            gifts = data_service.get_session_messages(session_id, 'gift', limit)
-
-            # 获取场次贡献榜
-            contributors = data_service.get_session_contributors(session_obj['live_id'], session_id, limit)
-
-            return jsonify({
+            result = {
                 'session': session_obj,
-                'chats': chats,
-                'gifts': gifts,
-                'contributors': contributors
-            })
+                'counts': counts
+            }
+
+            # 根据请求类型返回对应数据
+            if msg_type == 'chat':
+                messages = data_service.get_session_messages(session_id, 'chat', page_size, offset)
+                total = counts['chat_count']
+                result['chats'] = messages
+                result['pagination'] = {
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': (total + page_size - 1) // page_size if total > 0 else 1
+                }
+            elif msg_type == 'gift':
+                messages = data_service.get_session_messages(session_id, 'gift', page_size, offset)
+                total = counts['gift_count']
+                result['gifts'] = messages
+                result['pagination'] = {
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': (total + page_size - 1) // page_size if total > 0 else 1
+                }
+            elif msg_type == 'contributors':
+                contributors = data_service.get_session_contributors(session_obj['live_id'], session_id, 100)
+                result['contributors'] = contributors
+            else:
+                # 兼容旧的调用方式，返回所有数据（但只返回第一页）
+                result['chats'] = data_service.get_session_messages(session_id, 'chat', page_size, 0)
+                result['gifts'] = data_service.get_session_messages(session_id, 'gift', page_size, 0)
+                result['contributors'] = data_service.get_session_contributors(session_obj['live_id'], session_id, 100)
+
+            return jsonify(result)
         except Exception as e:
             logger.error(f"获取场次详情失败: {e}")
             return jsonify({'error': str(e)}), 500

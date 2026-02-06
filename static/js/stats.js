@@ -20,7 +20,13 @@ const app = new Vue({
         sessionDetailTab: 'chats',
         sessionDetailChats: [],
         sessionDetailGifts: [],
-        sessionDetailContributors: []
+        sessionDetailContributors: [],
+        // 场次详情分页
+        sessionDetailPagination: {
+            chats: { page: 1, page_size: 50, total: 0, total_pages: 1 },
+            gifts: { page: 1, page_size: 50, total: 0, total_pages: 1 }
+        },
+        sessionDetailCounts: { chat_count: 0, gift_count: 0 }
     },
     mounted() {
         this.loadRooms();
@@ -173,22 +179,35 @@ const app = new Vue({
             this.sessionDetail = session;
             this.sessionDetailLoading = true;
             this.sessionDetailTab = 'chats';
+            // 重置分页
+            this.sessionDetailPagination = {
+                chats: { page: 1, page_size: 50, total: 0, total_pages: 1 },
+                gifts: { page: 1, page_size: 50, total: 0, total_pages: 1 }
+            };
 
             try {
-                const response = await fetch(`/api/rooms/sessions/${session.id}?limit=200`);
+                // 先获取基本信息和消息总数
+                const response = await fetch(`/api/rooms/sessions/${session.id}?type=chat&page=1&limit=50`);
                 const data = await response.json();
 
                 if (data.session) {
                     this.sessionDetail = data.session;
                 }
+                if (data.counts) {
+                    this.sessionDetailCounts = data.counts;
+                }
                 if (data.chats) {
                     this.sessionDetailChats = data.chats;
                 }
-                if (data.gifts) {
-                    this.sessionDetailGifts = data.gifts;
+                if (data.pagination) {
+                    this.sessionDetailPagination.chats = data.pagination;
                 }
-                if (data.contributors) {
-                    this.sessionDetailContributors = data.contributors;
+
+                // 同时获取贡献榜
+                const contribResponse = await fetch(`/api/rooms/sessions/${session.id}?type=contributors`);
+                const contribData = await contribResponse.json();
+                if (contribData.contributors) {
+                    this.sessionDetailContributors = contribData.contributors;
                 }
             } catch (error) {
                 console.error('加载场次详情失败:', error);
@@ -196,12 +215,82 @@ const app = new Vue({
                 this.sessionDetailLoading = false;
             }
         },
+        async loadSessionDetailTab(tab) {
+            this.sessionDetailTab = tab;
+
+            if (tab === 'chats' && this.sessionDetailChats.length === 0) {
+                await this.loadSessionDetailData('chat');
+            } else if (tab === 'gifts' && this.sessionDetailGifts.length === 0) {
+                await this.loadSessionDetailData('gift');
+            }
+        },
+        async loadSessionDetailData(type) {
+            const pagination = type === 'chat' ? this.sessionDetailPagination.chats : this.sessionDetailPagination.gifts;
+            try {
+                const response = await fetch(`/api/rooms/sessions/${this.sessionDetail.id}?type=${type}&page=${pagination.page}&limit=${pagination.page_size}`);
+                const data = await response.json();
+
+                if (type === 'chat' && data.chats) {
+                    this.sessionDetailChats = data.chats;
+                    if (data.pagination) {
+                        this.sessionDetailPagination.chats = data.pagination;
+                    }
+                } else if (type === 'gift' && data.gifts) {
+                    this.sessionDetailGifts = data.gifts;
+                    if (data.pagination) {
+                        this.sessionDetailPagination.gifts = data.pagination;
+                    }
+                }
+            } catch (error) {
+                console.error(`加载${type === 'chat' ? '弹幕' : '礼物'}记录失败:`, error);
+            }
+        },
+        async goToSessionPage(type, page) {
+            const pagination = type === 'chat' ? this.sessionDetailPagination.chats : this.sessionDetailPagination.gifts;
+            if (page < 1 || page > pagination.total_pages) return;
+            pagination.page = page;
+            await this.loadSessionDetailData(type);
+        },
+        getSessionPageNumbers(type) {
+            const pagination = type === 'chat' ? this.sessionDetailPagination.chats : this.sessionDetailPagination.gifts;
+            const current = pagination.page;
+            const total = pagination.total_pages;
+            const pages = [];
+
+            if (total <= 7) {
+                for (let i = 1; i <= total; i++) {
+                    pages.push(i);
+                }
+            } else {
+                if (current <= 4) {
+                    for (let i = 1; i <= 5; i++) pages.push(i);
+                    pages.push('...');
+                    pages.push(total);
+                } else if (current >= total - 3) {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = total - 4; i <= total; i++) pages.push(i);
+                } else {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = current - 1; i <= current + 1; i++) pages.push(i);
+                    pages.push('...');
+                    pages.push(total);
+                }
+            }
+            return pages;
+        },
         closeSessionModal() {
             this.showSessionModal = false;
             this.sessionDetail = {};
             this.sessionDetailChats = [];
             this.sessionDetailGifts = [];
             this.sessionDetailContributors = [];
+            this.sessionDetailPagination = {
+                chats: { page: 1, page_size: 50, total: 0, total_pages: 1 },
+                gifts: { page: 1, page_size: 50, total: 0, total_pages: 1 }
+            };
+            this.sessionDetailCounts = { chat_count: 0, gift_count: 0 };
         },
         formatIncome(value) {
             return value ? value.toLocaleString() + ' 钻石' : '0 钻石';
