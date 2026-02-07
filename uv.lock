@@ -175,7 +175,7 @@ wheels = [
 ]
 
 [[package]]
-name = "douyin-live-monitor"
+name = "douyin-live-hub"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
