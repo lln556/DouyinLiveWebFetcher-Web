@@ -83,6 +83,8 @@
                         <input
                             v-model="customStartDate"
                             type="date"
+                            :min="minDate"
+                            :max="maxDate"
                             class="px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
                     </div>
                     <div>
@@ -90,6 +92,8 @@
                         <input
                             v-model="customEndDate"
                             type="date"
+                            :min="minDate"
+                            :max="maxDate"
                             class="px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
                     </div>
                 </div>
@@ -145,6 +149,62 @@
                 <div class="bg-white rounded-lg shadow-md p-4">
                     <div class="text-sm text-gray-600">场均收入</div>
                     <div class="text-2xl font-bold text-orange-600" v-text="formatAvgIncome()"></div>
+                </div>
+            </div>
+
+            <!-- 贡献总榜 -->
+            <div class="bg-white rounded-lg shadow-md">
+                <div class="px-6 py-4 border-b flex justify-between items-center">
+                    <h2 class="text-xl font-bold">
+                        <svg class="w-5 h-5 inline mr-2 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                        贡献总榜
+                    </h2>
+                    <span class="text-sm text-gray-500">TOP 100</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">排名</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">用户</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">礼物数</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">弹幕数</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">贡献值</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            <tr v-if="contributors.length === 0">
+                                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                                    暂无数据
+                                </td>
+                            </tr>
+                            <tr v-for="(contributor, index) in contributors" :key="contributor.user_id" class="hover:bg-gray-50">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span v-if="index === 0" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-600 text-white font-bold text-sm">1</span>
+                                    <span v-else-if="index === 1" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-gray-300 to-gray-500 text-white font-bold text-sm">2</span>
+                                    <span v-else-if="index === 2" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 text-white font-bold text-sm">3</span>
+                                    <span v-else class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-600 font-bold text-sm" v-text="index + 1"></span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        <img v-if="contributor.user_avatar" :src="contributor.user_avatar" class="w-10 h-10 rounded-full mr-3">
+                                        <div v-else class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold mr-3" v-text="(contributor.nickname || contributor.user_id || '').substring(0, 1)"></div>
+                                        <div>
+                                            <div class="text-sm font-medium text-gray-900" v-text="contributor.nickname || contributor.user_id"></div>
+                                            <div v-if="contributor.user_level" class="flex items-center mt-1">
+                                                <img :src="'/level_img/level_' + contributor.user_level + '.png'" class="h-4" style="object-fit: contain;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" v-text="formatNumber(contributor.gift_count)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" v-text="formatNumber(contributor.chat_count)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-yellow-600" v-text="formatNumber(contributor.contribution_value)"></td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

@@ -392,6 +392,139 @@ class DataService:
         finally:
             session.close()
 
+    def get_contributors_by_date_range(self, live_id: str = None, start_date: str = None, end_date: str = None, limit: int = 100) -> List[Dict]:
+        """
+        按日期范围获取贡献榜（从礼物消息中聚合）
+        :param live_id: 房间ID，None 表示所有房间
+        :param start_date: 开始日期 (YYYY-MM-DD)
+        :param end_date: 结束日期 (YYYY-MM-DD)
+        :param limit: 返回数量限制
+        :return: 贡献榜列表
+        """
+        session = self.get_session()
+        try:
+            from sqlalchemy import func
+
+            # 构建查询条件
+            conditions = []
+
+            if live_id:
+                conditions.append(GiftMessage.live_id == live_id)
+
+            if start_date:
+                start_datetime = datetime.strptime(start_date, '%Y-%m-%d').replace(
+                    hour=0, minute=0, second=0, microsecond=0,
+                    tzinfo=CHINA_TZ
+                )
+                conditions.append(GiftMessage.created_at >= start_datetime)
+
+            if end_date:
+                end_datetime = datetime.strptime(end_date, '%Y-%m-%d').replace(
+                    hour=23, minute=59, second=59, microsecond=999999,
+                    tzinfo=CHINA_TZ
+                )
+                conditions.append(GiftMessage.created_at <= end_datetime)
+
+            # 聚合查询：按用户统计礼物贡献
+            query = session.query(
+                GiftMessage.live_id,
+                GiftMessage.anchor_name,
+                GiftMessage.user_id,
+                GiftMessage.user_name,
+                func.sum(GiftMessage.total_value).label('contribution_value'),
+                func.count(GiftMessage.id).label('gift_count'),
+                func.min(GiftMessage.user_avatar).label('user_avatar'),
+                func.min(GiftMessage.user_level).label('user_level')
+            )
+
+            if conditions:
+                query = query.filter(and_(*conditions))
+
+            # 按房间和用户分组
+            query = query.group_by(
+                GiftMessage.live_id,
+                GiftMessage.anchor_name,
+                GiftMessage.user_id,
+                GiftMessage.user_name
+            ).order_by(func.sum(GiftMessage.total_value).desc()).limit(limit)
+
+            results = query.all()
+
+            # 转换为字典列表
+            contributors = []
+            for row in results:
+                # 计算弹幕数（需要从 ChatMessage 中获取）
+                chat_conditions = []
+                if live_id:
+                    chat_conditions.append(ChatMessage.live_id == live_id)
+                else:
+                    chat_conditions.append(ChatMessage.live_id == row.live_id)
+                chat_conditions.append(ChatMessage.user_id == row.user_id)
+                if start_date:
+                    chat_conditions.append(ChatMessage.created_at >= start_datetime)
+                if end_date:
+                    chat_conditions.append(ChatMessage.created_at <= end_datetime)
+
+                chat_count = session.query(func.count(ChatMessage.id)).filter(
+                    and_(*chat_conditions)
+                ).scalar() or 0
+
+                contributors.append({
+                    'live_id': row.live_id,
+                    'anchor_name': row.anchor_name,
+                    'user_id': row.user_id,
+                    'nickname': row.user_name,
+                    'contribution_value': int(row.contribution_value),
+                    'gift_count': int(row.gift_count),
+                    'chat_count': chat_count,
+                    'user_avatar': row.user_avatar,
+                    'user_level': row.user_level
+                })
+
+            return contributors
+        finally:
+            session.close()
+
+    def get_room_date_range(self, live_id: str = None) -> Dict[str, Optional[str]]:
+        """
+        获取房间的直播数据日期范围（最早和最晚的直播日期）
+        :param live_id: 房间ID，None 表示所有房间
+        :return: {'min_date': 'YYYY-MM-DD', 'max_date': 'YYYY-MM-DD'}
+        """
+        session = self.get_session()
+        try:
+            conditions = []
+            if live_id:
+                conditions.append(LiveSession.live_id == live_id)
+            else:
+                # 查询所有有数据的房间
+                conditions.append(LiveSession.live_id.isnot(None))
+
+            # 查询最早的直播日期
+            min_date_query = session.query(
+                func.date(LiveSession.start_time)
+            ).filter(
+                and_(*conditions, LiveSession.start_time.isnot(None))
+            ).order_by(LiveSession.start_time.asc()).limit(1).scalar()
+
+            # 查询最晚的直播日期
+            max_date_query = session.query(
+                func.date(LiveSession.start_time)
+            ).filter(
+                and_(*conditions, LiveSession.start_time.isnot(None))
+            ).order_by(LiveSession.start_time.desc()).limit(1).scalar()
+
+            return {
+                'min_date': min_date_query.strftime('%Y-%m-%d') if min_date_query else None,
+                'max_date': max_date_query.strftime('%Y-%m-%d') if max_date_query else None
+            }
+        finally:
+            session.close()
+
+    def get_all_rooms_date_range(self) -> Dict[str, Optional[str]]:
+        """获取所有房间中最早和最晚的直播日期"""
+        return self.get_room_date_range(live_id=None)
+
     def get_user_contribution(self, live_id: str, user_id: str) -> Optional[UserContribution]:
         """获取用户贡献"""
         session = self.get_session()

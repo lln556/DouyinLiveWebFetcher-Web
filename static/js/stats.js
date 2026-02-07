@@ -9,8 +9,11 @@ const app = new Vue({
         timeRange: '7days',
         customStartDate: '',
         customEndDate: '',
+        minDate: '',  // 可选的最早日期
+        maxDate: '',  // 可选的最晚日期
         stats: {},
         sessions: [],
+        contributors: [],  // 贡献总榜
         loading: true,
         hasSearched: false,
         // 场次详情相关
@@ -28,8 +31,11 @@ const app = new Vue({
         },
         sessionDetailCounts: { chat_count: 0, gift_count: 0 }
     },
-    mounted() {
-        this.loadRooms();
+    async mounted() {
+        await Promise.all([
+            this.loadRooms(),
+            this.loadDateRange()
+        ]);
         this.initCustomDates();
         // 不在 mounted 时自动加载数据，等待用户点击查询
     },
@@ -45,11 +51,34 @@ const app = new Vue({
                 console.error('加载房间列表失败:', error);
             }
         },
+        async loadDateRange() {
+            // 加载所有房间的日期范围
+            try {
+                const response = await fetch('/api/rooms/date-range');
+                const data = await response.json();
+                if (data.min_date) {
+                    this.minDate = data.min_date;
+                }
+                if (data.max_date) {
+                    this.maxDate = data.max_date;
+                }
+            } catch (error) {
+                console.error('加载日期范围失败:', error);
+            }
+        },
         initCustomDates() {
-            // 初始化自定义日期为最近7天
+            // 初始化自定义日期为最近7天，但要在允许的范围内
             const today = new Date();
-            const weekAgo = new Date(today);
+            let weekAgo = new Date(today);
             weekAgo.setDate(weekAgo.getDate() - 7);
+
+            // 如果有日期限制，调整到允许的范围内
+            if (this.minDate) {
+                const minDt = new Date(this.minDate);
+                if (weekAgo < minDt) {
+                    weekAgo = new Date(minDt);
+                }
+            }
 
             this.customEndDate = this.formatDateForInput(today);
             this.customStartDate = this.formatDateForInput(weekAgo);
@@ -149,6 +178,19 @@ const app = new Vue({
                     this.stats = statsData.stats;
                 }
 
+                // 加载贡献榜数据
+                let contributorsUrl = `/api/rooms/contributors-by-date?${params}`;
+                if (this.selectedRoomId) {
+                    contributorsUrl += `&live_id=${this.selectedRoomId}`;
+                }
+                const contributorsResponse = await fetch(contributorsUrl);
+                const contributorsData = await contributorsResponse.json();
+                if (contributorsData.contributors) {
+                    this.contributors = contributorsData.contributors;
+                } else {
+                    this.contributors = [];
+                }
+
                 // 如果选择了房间，加载场次列表
                 if (this.selectedRoomId) {
                     const sessionsUrl = `/api/rooms/${this.selectedRoomId}/sessions?${params}`;
@@ -171,8 +213,33 @@ const app = new Vue({
         },
         loadRoomData() {
             this.sessions = [];
+            this.contributors = [];
             this.hasSearched = false;
+            // 加载选中房间的日期范围
+            this.loadRoomDateRange();
+            // 重新初始化自定义日期
+            this.initCustomDates();
             // 不自动加载数据，等待用户点击查询
+        },
+        async loadRoomDateRange() {
+            // 加载选中房间的日期范围
+            if (this.selectedRoomId) {
+                try {
+                    const response = await fetch(`/api/rooms/date-range?live_id=${this.selectedRoomId}`);
+                    const data = await response.json();
+                    if (data.min_date) {
+                        this.minDate = data.min_date;
+                    }
+                    if (data.max_date) {
+                        this.maxDate = data.max_date;
+                    }
+                } catch (error) {
+                    console.error('加载房间日期范围失败:', error);
+                }
+            } else {
+                // 加载所有房间的日期范围
+                await this.loadDateRange();
+            }
         },
         async viewSessionDetail(session) {
             this.showSessionModal = true;

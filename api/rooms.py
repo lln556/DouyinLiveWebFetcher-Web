@@ -305,6 +305,45 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
             logger.error(f"获取场次贡献榜失败: {e}")
             return jsonify({'error': str(e)}), 500
 
+    @rooms_bp.route('/contributors-by-date', methods=['GET'])
+    def get_contributors_by_date():
+        """按日期范围获取贡献榜"""
+        try:
+            live_id = request.args.get('live_id')  # 可选，不传表示所有房间
+            start_date = request.args.get('start_date')
+            end_date = request.args.get('end_date')
+            limit = min(int(request.args.get('limit', 100)), 1000)
+
+            # 验证日期参数
+            if not start_date or not end_date:
+                return jsonify({'error': '请提供 start_date 和 end_date 参数'}), 400
+
+            contributors = data_service.get_contributors_by_date_range(
+                live_id=live_id,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit
+            )
+
+            return jsonify({
+                'contributors': contributors,
+                'count': len(contributors)
+            })
+        except Exception as e:
+            logger.error(f"按日期获取贡献榜失败: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @rooms_bp.route('/date-range', methods=['GET'])
+    def get_date_range():
+        """获取直播数据的日期范围"""
+        try:
+            live_id = request.args.get('live_id')
+            date_range = data_service.get_room_date_range(live_id)
+            return jsonify(date_range)
+        except Exception as e:
+            logger.error(f"获取日期范围失败: {e}")
+            return jsonify({'error': str(e)}), 500
+
     @rooms_bp.route('/<live_id>/stats', methods=['GET'])
     def get_room_stats(live_id):
         """获取房间统计"""
