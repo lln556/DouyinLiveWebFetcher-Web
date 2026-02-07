@@ -8,6 +8,7 @@ const app = new Vue({
         live_id: null,  // 用于模板显示
         room: null,
         loading: true,
+        loadingMessages: true,  // 加载消息时的loading状态
         activeTab: 'all', // all/chat/gift
         messages: [],
         stats: {
@@ -19,27 +20,11 @@ const app = new Vue({
         },
         currentSession: null,
         contributors: [],
-        historyMessages: [],
-        showHistoryModal: false,
         socket: null,
-        maxMessages: Infinity,  // 不限制消息数量
-        // 历史记录分页相关
-        history: {
-            messages: [],
-            loading: false,
-            type: 'all',  // all/chat/gift
-            pagination: {
-                total: 0,
-                page: 1,
-                page_size: 50,
-                total_pages: 1
-            },
-            counts: {
-                total_count: 0,
-                chat_count: 0,
-                gift_count: 0
-            }
-        }
+        initialMessageCount: 0,  // 记录初始加载的消息数量
+        isAtBottom: true,  // 用户是否在底部
+        unreadCount: 0,  // 未读消息数量
+        isUserScrolling: false  // 用户是否正在手动滚动
     },
     computed: {
         filteredMessages() {
@@ -60,18 +45,32 @@ const app = new Vue({
 
         console.log('liveId:', this.liveId);
         console.log('Vue 实例:', this);
-        console.log('messages 数组:', this.messages);
 
+        // 并行加载数据
         this.loadRoomInfo();
         this.loadCurrentSession();
-        this.loadHistoryMessages();
-        this.loadSessionContributors();  // 首次加载贡献榜
+        this.loadSessionMessages();  // 加载当前场次消息
+        this.loadSessionContributors();
         this.initSocket();
+
+        // 添加滚动监听
+        this.$nextTick(() => {
+            const container = document.querySelector('.messages-container');
+            if (container) {
+                container.addEventListener('scroll', this.handleScroll);
+            }
+        });
+
         console.log('=== Vue mounted 结束 ===');
     },
     beforeDestroy() {
         if (this.socket) {
             this.socket.disconnect();
+        }
+        // 移除滚动监听
+        const container = document.querySelector('.messages-container');
+        if (container) {
+            container.removeEventListener('scroll', this.handleScroll);
         }
     },
     methods: {
@@ -106,16 +105,77 @@ const app = new Vue({
                 console.error('加载当前直播场次失败:', error);
             }
         },
-        async loadHistoryMessages() {
+        async loadSessionMessages() {
+            this.loadingMessages = true;
             try {
-                const response = await fetch(`/api/rooms/${this.liveId}/messages?limit=50`);
-                const data = await response.json();
+                // 获取当前直播场次
+                const sessionResponse = await fetch(`/api/rooms/${this.liveId}/current-session`);
+                const sessionData = await sessionResponse.json();
 
-                if (data.messages) {
-                    this.historyMessages = data.messages;
+                if (!sessionData.session) {
+                    console.log('暂无直播场次数据');
+                    this.loadingMessages = false;
+                    return;
                 }
+
+                const sessionId = sessionData.session.id;
+                console.log('加载当前场次消息:', sessionId);
+
+                // 获取当前场次的所有消息（无限制）
+                const batchSize = 500;
+                let offset = 0;
+                let hasMore = true;
+                let allMessages = [];
+
+                // 并行加载弹幕和礼物
+                const [chatResponse, giftResponse] = await Promise.all([
+                    fetch(`/api/sessions/${sessionId}?type=chat&limit=10000`),
+                    fetch(`/api/sessions/${sessionId}?type=gift&limit=10000`)
+                ]);
+
+                const [chatData, giftData] = await Promise.all([
+                    chatResponse.json(),
+                    giftResponse.json()
+                ]);
+
+                // 合并弹幕消息
+                if (chatData.chats) {
+                    allMessages.push(...chatData.chats.map(msg => ({
+                        type: 'chat',
+                        content: msg.display_content || msg.content,
+                        timestamp: new Date(msg.created_at)
+                    })));
+                }
+
+                // 合并礼物消息
+                if (giftData.gifts) {
+                    allMessages.push(...giftData.gifts.map(msg => ({
+                        type: 'gift',
+                        content: msg.display_content || `${msg.user_name} 赠送了 ${msg.gift_name} x${msg.gift_count}`,
+                        timestamp: new Date(msg.created_at)
+                    })));
+                }
+
+                // 按时间排序
+                allMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+                this.messages = allMessages;
+                this.initialMessageCount = allMessages.length;
+                console.log(`已加载 ${allMessages.length} 条消息`);
+
+                // 滚动到底部显示最新消息
+                this.$nextTick(() => {
+                    const container = document.querySelector('.messages-container');
+                    if (container) {
+                        container.scrollTop = container.scrollHeight;
+                        this.isAtBottom = true;
+                        this.unreadCount = 0;
+                    }
+                });
             } catch (error) {
-                console.error('加载历史消息失败:', error);
+                console.error('加载场次消息失败:', error);
+            } finally {
+                this.loadingMessages = false;
             }
         },
         async startMonitoring() {
@@ -226,32 +286,45 @@ const app = new Vue({
             });
         },
         handleMessage(data) {
-            console.log('=== 处理消息 ===');
-            console.log('消息数据:', data);
-            console.log('当前消息数量:', this.messages.length);
-
             // 添加到消息列表（新消息在末尾）
             this.messages.push({
                 ...data,
                 timestamp: new Date()
             });
 
-            console.log('添加后消息数量:', this.messages.length);
-            console.log('filteredMessages数量:', this.filteredMessages.length);
-
-            // 限制消息数量
-            if (this.messages.length > this.maxMessages) {
-                this.messages.shift();
-            }
-
-            // 滚动到底部查看最新消息
+            // 智能滚动：只有当用户在底部时才自动滚动
             this.$nextTick(() => {
                 const container = document.querySelector('.messages-container');
                 if (container) {
-                    container.scrollTop = container.scrollHeight;
-                    console.log('已滚动到底部');
+                    if (this.isAtBottom) {
+                        container.scrollTop = container.scrollHeight;
+                    } else {
+                        this.unreadCount++;
+                    }
                 }
             });
+        },
+        handleScroll() {
+            const container = document.querySelector('.messages-container');
+            if (!container) return;
+
+            const threshold = 50;  // 距离底部50px内视为在底部
+            const isBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+
+            if (isBottom !== this.isAtBottom) {
+                this.isAtBottom = isBottom;
+                if (isBottom) {
+                    this.unreadCount = 0;  // 滚动到底部时清空未读数
+                }
+            }
+        },
+        scrollToBottom() {
+            const container = document.querySelector('.messages-container');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+                this.isAtBottom = true;
+                this.unreadCount = 0;
+            }
         },
         setTab(tab) {
             this.activeTab = tab;
@@ -343,100 +416,6 @@ const app = new Vue({
             if (rank === 2) return 'rank-2';
             if (rank === 3) return 'rank-3';
             return 'rank-other';
-        },
-        // 历史记录相关方法
-        openHistoryModal() {
-            this.showHistoryModal = true;
-            this.history.page = 1;
-            this.history.type = 'all';
-            this.loadHistoryData();
-        },
-        closeHistoryModal() {
-            this.showHistoryModal = false;
-        },
-        async loadHistoryData() {
-            this.history.loading = true;
-            try {
-                const params = new URLSearchParams({
-                    page: this.history.pagination.page,
-                    limit: this.history.pagination.page_size,
-                    type: this.history.type
-                });
-                const response = await fetch(`/api/rooms/${this.liveId}/messages?${params}`);
-                const data = await response.json();
-
-                if (data.messages) {
-                    this.history.messages = data.messages;
-                }
-                if (data.pagination) {
-                    this.history.pagination = data.pagination;
-                }
-                if (data.counts) {
-                    this.history.counts = data.counts;
-                }
-            } catch (error) {
-                console.error('加载历史消息失败:', error);
-            } finally {
-                this.history.loading = false;
-            }
-        },
-        changeHistoryType(type) {
-            this.history.type = type;
-            this.history.pagination.page = 1;
-            this.loadHistoryData();
-        },
-        goToPage(page) {
-            if (page < 1 || page > this.history.pagination.total_pages) return;
-            this.history.pagination.page = page;
-            this.loadHistoryData();
-        },
-        prevPage() {
-            this.goToPage(this.history.pagination.page - 1);
-        },
-        nextPage() {
-            this.goToPage(this.history.pagination.page + 1);
-        },
-        formatHistoryMessage(msg) {
-            if (msg.type === 'gift') {
-                return `${msg.user_name} 赠送了 ${msg.gift_name} x${msg.gift_count}`;
-            } else if (msg.content) {
-                return msg.content;
-            } else if (msg.display_content) {
-                return msg.display_content;
-            }
-            return '';
-        },
-        getHistoryMessageClass(msg) {
-            return msg.type === 'gift' ? 'gift-message' : 'chat-message';
-        },
-        // 计算分页显示的页码范围
-        getPageNumbers() {
-            const current = this.history.pagination.page;
-            const total = this.history.pagination.total_pages;
-            const pages = [];
-
-            if (total <= 7) {
-                for (let i = 1; i <= total; i++) {
-                    pages.push(i);
-                }
-            } else {
-                if (current <= 4) {
-                    for (let i = 1; i <= 5; i++) pages.push(i);
-                    pages.push('...');
-                    pages.push(total);
-                } else if (current >= total - 3) {
-                    pages.push(1);
-                    pages.push('...');
-                    for (let i = total - 4; i <= total; i++) pages.push(i);
-                } else {
-                    pages.push(1);
-                    pages.push('...');
-                    for (let i = current - 1; i <= current + 1; i++) pages.push(i);
-                    pages.push('...');
-                    pages.push(total);
-                }
-            }
-            return pages;
         }
     }
 });
