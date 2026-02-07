@@ -71,15 +71,46 @@ class MonitoredRoom:
     def stop(self):
         """停止监控"""
         self.shutdown_event.set()
+
+        # 停止 fetcher（如果存在且已启动）
+        # 检查 fetcher 是否已初始化并尝试安全停止
         if self.fetcher:
             try:
-                # 停止前结束当前直播场次
-                self.fetcher._end_current_session(reason="监控停止")
-                self.fetcher.stop()
+                # 检查内部 fetcher 是否有 ws 属性（已启动）
+                if hasattr(self.fetcher, '_fetcher') and hasattr(self.fetcher._fetcher, 'ws'):
+                    self.fetcher.stop()
+                else:
+                    logger.debug(f"[{self.live_id}] Fetcher 未启动，跳过停止操作")
             except Exception as e:
-                logger.error(f"停止fetcher时出错: {e}")
+                logger.debug(f"[{self.live_id}] 停止 fetcher 时出错（已忽略）: {e}")
 
-        # 更新数据库状态
+        # 智能模式：检查是否有进行中的场次，并判断主播是否还在直播
+        try:
+            current_session = self.manager.data_service.get_current_live_session(self.live_id)
+            if current_session and current_session.status == 'live':
+                # 创建临时 fetcher 检测主播是否还在直播
+                from crawler import DouyinLiveWebFetcher
+                temp_fetcher = DouyinLiveWebFetcher(self.live_id)
+                is_live = temp_fetcher.get_room_status()
+
+                if is_live:
+                    # 主播还在直播，保留场次不结束
+                    logger.info(f"[{self.live_id}] 主播还在直播，保留场次: session_id={current_session.id}")
+                else:
+                    # 主播已下播，结束场次
+                    logger.info(f"[{self.live_id}] 主播已下播，结束场次: session_id={current_session.id}")
+                    self.manager.data_service.end_live_session(
+                        current_session.id,
+                        peak_viewer_count=current_session.peak_viewer_count
+                    )
+        except Exception as e:
+            logger.error(f"检测直播状态时出错: {e}")
+
+        # 更新数据库状态（用户手动停止时关闭自动重连）
+        self.manager.data_service.update_live_room(
+            self.live_id,
+            auto_reconnect=False  # 用户手动停止，不自动重启
+        )
         self.manager.data_service.update_live_room_status(
             self.live_id,
             'stopped',
@@ -370,11 +401,11 @@ class MonitoredRoom:
     def check_and_end_session_if_offline(self, reason: str = "检测到未开播"):
         """
         检查是否应该结束直播场次
-        当连续多次检测到未开播后，才结束场次（避免网络波动导致误判）
+        检测到未开播时立即结束场次
         :param reason: 未开播的原因
         :return: 是否结束了场次
         """
-        OFFLINE_THRESHOLD = 3  # 连续3次检测到未开播后，才标记为下播
+        OFFLINE_THRESHOLD = 1  # 检测到未开播后立即标记为下播
 
         self.offline_check_count += 1
         logger.info(f"[{self.live_id}] 检测到未开播，计数器: {self.offline_check_count}/{OFFLINE_THRESHOLD}，原因={reason}")
@@ -610,6 +641,9 @@ class RoomManager:
             # 添加防风控启动延迟
             if config.ANTI_DETECTION_ENABLED and config.ANTI_DETECTION_THREAD_START_INTERVAL > 0:
                 time.sleep(config.ANTI_DETECTION_THREAD_START_INTERVAL)
+
+            # 用户手动启动监控时，重新启用自动重连
+            self.data_service.update_live_room(live_id, auto_reconnect=True)
 
             monitored_room.start()
             return True

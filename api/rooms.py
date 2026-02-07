@@ -32,30 +32,21 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
 
             result = []
             for room in rooms:
-                # 获取活跃状态
-                stats = {}
-                is_active = False
+                # 获取监控线程状态
+                is_monitor_alive = False
                 if room.live_id in active_status:
-                    is_active = active_status[room.live_id]['is_active']
-                    stats = active_status[room.live_id]['stats']
+                    is_monitor_alive = active_status[room.live_id]['is_active']
 
-                # 判断直播状态：有人在线即为直播中
-                live_status = 'live' if stats.get('current_user_count', 0) > 0 else 'offline'
+                # 判断直播状态：基于数据库中是否有进行中的直播场次
+                current_session = data_service.get_current_live_session(room.live_id)
+                live_status = 'live' if current_session and current_session.status == 'live' else 'offline'
 
                 room_dict = {
                     'live_id': room.live_id,
                     'anchor_name': room.anchor_name,
-                    'anchor_id': room.anchor_id,
-                    'monitor_status': room.status,  # 监控状态: monitoring/stopped/error
+                    'status': room.status,  # 监控状态: monitoring/stopped/offline/error
                     'live_status': live_status,  # 直播状态: live/offline
-                    'status': room.status,  # 兼容旧版
-                    'monitor_type': room.monitor_type,
-                    'auto_reconnect': room.auto_reconnect,
-                    'reconnect_count': room.reconnect_count,
-                    'created_at': room.created_at.isoformat() if room.created_at else None,
-                    'updated_at': room.updated_at.isoformat() if room.updated_at else None,
-                    'is_active': is_active,
-                    'stats': stats
+                    'is_monitor_alive': is_monitor_alive  # 监控线程是否活跃
                 }
 
                 result.append(room_dict)
@@ -74,6 +65,13 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
 
             if not live_id:
                 return jsonify({'error': '请提供直播间ID'}), 400
+
+            # 验证 live_id 格式：必须是纯数字，长度不超过 20 位
+            import re
+            if not re.match(r'^\d{1,20}$', str(live_id).strip()):
+                return jsonify({'error': '直播间ID格式错误，应为1-20位纯数字'}), 400
+
+            live_id = live_id.strip()
 
             # 默认监控类型为 24h，自动重连为 True
             monitor_type = '24h'

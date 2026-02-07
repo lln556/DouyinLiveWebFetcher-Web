@@ -14,8 +14,7 @@ const app = new Vue({
         editRoom: {
             live_id: '',
             anchor_name: '',
-            status: '',
-            reconnect_count: 0
+            status: ''
         },
         rooms: [],
         stats: {
@@ -91,8 +90,7 @@ const app = new Vue({
             this.editRoom = {
                 live_id: room.live_id,
                 anchor_name: room.anchor_name,
-                status: room.status,
-                reconnect_count: room.reconnect_count || 0
+                status: room.status
             };
         },
         closeEditModal() {
@@ -208,23 +206,28 @@ const app = new Vue({
             return this.getMonitorStatusText(status);
         },
         getMonitorStatusClass(room) {
-            // 只要监控线程在运行就是监控中（绿色）
-            if (room.is_active === true) {
-                return 'bg-green-100 text-green-800';
+            // 基于 status 字段判断监控状态
+            switch (room.status) {
+                case 'monitoring': return 'bg-green-100 text-green-800';
+                case 'offline': return 'bg-yellow-100 text-yellow-800';
+                case 'stopped': return 'bg-gray-100 text-gray-800';
+                case 'error': return 'bg-red-100 text-red-800';
+                default: return 'bg-gray-100 text-gray-800';
             }
-            // 否则显示已停止（灰色）
-            return 'bg-gray-100 text-gray-800';
         },
         getMonitorStatusText(room) {
-            // 只要监控线程在运行就是监控中
-            if (room.is_active === true) {
-                return '监控中';
+            // 基于 status 字段判断监控状态
+            switch (room.status) {
+                case 'monitoring': return '监控中';
+                case 'offline': return '等待中';
+                case 'stopped': return '已停止';
+                case 'error': return '错误';
+                default: return '未知';
             }
-            return '已停止';
         },
         getIsMonitoring(room) {
             // 判断是否正在监控：监控线程运行中
-            return room.is_active === true;
+            return room.is_monitor_alive === true;
         },
         getLiveStatusClass(status) {
             switch (status) {

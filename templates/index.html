@@ -117,13 +117,12 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">主播名称</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">监控状态</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">直播状态</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">重连次数</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         <tr v-if="rooms.length === 0">
-                            <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                            <td colspan="5" class="px-6 py-8 text-center text-gray-500">
                                 暂无监控房间，点击上方按钮添加
                             </td>
                         </tr>
@@ -143,9 +142,6 @@
                                 <span :class="['px-2 py-1 text-xs rounded-full', getLiveStatusClass(room.live_status)]">
                                     <span v-text="getLiveStatusText(room.live_status)"></span>
                                 </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-gray-600">
-                                <span v-text="room.reconnect_count || 0"></span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">
                                 <button
@@ -297,10 +293,6 @@
                         <div class="flex justify-between">
                             <span class="text-sm text-gray-600">监控状态:</span>
                             <span :class="['text-xs px-2 py-1 rounded-full', getMonitorStatusClass(editRoom)]" v-text="getMonitorStatusText(editRoom)"></span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-sm text-gray-600">重连次数:</span>
-                            <span class="text-sm font-medium" v-text="editRoom.reconnect_count || 0"></span>
                         </div>
                     </div>
                     <div class="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
