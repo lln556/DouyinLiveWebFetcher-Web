@@ -239,6 +239,13 @@ class WebDouyinLiveFetcher:
         user = gift_msg.user.nick_name
         gift_name = gift_msg.gift.name
         gift_price = gift_msg.gift.diamond_count
+        # 某些礼物的 API 返回价格不准确，按名称修正
+        GIFT_PRICE_FIX = {
+            '闪烁星河': 9,
+            '点点星光': 99,
+        }
+        if gift_name in GIFT_PRICE_FIX:
+            gift_price = GIFT_PRICE_FIX[gift_name]
         level = gift_msg.user.pay_grade.level if hasattr(gift_msg.user, 'pay_grade') else 0
 
         # 处理用户ID：优先使用 id_str，如果 ID 为匿名特征值（如 111111, 0），则使用"用户名_等级"组合
