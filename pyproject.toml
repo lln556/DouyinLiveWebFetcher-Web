@@ -1,7 +1,7 @@
 [project]
-name = "douyin-live-monitor"
+name = "douyin-live-hub"
 version = "1.0.0"
-description = "抖音直播间实时监控平台"
+description = "抖音直播数据记录站"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [

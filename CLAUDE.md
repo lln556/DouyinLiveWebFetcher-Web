@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-DouyinLiveWebFetcher 是一个抖音直播间实时数据抓取工具，通过逆向工程实现与抖音WebSocket服务器的通信。项目提供两种使用方式：命令行版 (`main.py`) 和 Web版 (`app.py`)。
+DouyinLiveHub 是一个抖音直播数据记录站，通过逆向工程实现与抖音WebSocket服务器的通信。项目提供两种使用方式：命令行版 (`main.py`) 和 Web版 (`app.py`)。
 
-Web 版本支持**多直播间 24 小时监控**，具有数据持久化、实时 Socket.IO 推送、自动重连等功能。
+Web 版本支持**多直播间 24 小时记录**，具有数据持久化、实时 Socket.IO 推送、自动重连等功能。
 
 **重要声明**: 本项目仅供学习研究交流使用，严禁用于商业谋利等非法用途。
 
