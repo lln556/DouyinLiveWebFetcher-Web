@@ -433,7 +433,6 @@ class DataService:
                 GiftMessage.user_name,
                 func.sum(GiftMessage.total_value).label('contribution_value'),
                 func.count(GiftMessage.id).label('gift_count'),
-                func.min(GiftMessage.user_avatar).label('user_avatar'),
                 func.min(GiftMessage.user_level).label('user_level')
             )
 
@@ -477,7 +476,7 @@ class DataService:
                     'contribution_value': int(row.contribution_value),
                     'gift_count': int(row.gift_count),
                     'chat_count': chat_count,
-                    'user_avatar': row.user_avatar,
+                    'user_avatar': None,  # GiftMessage 没有头像字段，使用默认头像
                     'user_level': row.user_level
                 })
 
