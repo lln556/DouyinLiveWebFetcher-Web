@@ -13,7 +13,13 @@ const app = new Vue({
         maxDate: '',  // 可选的最晚日期
         stats: {},
         sessions: [],
-        contributors: [],  // 贡献总榜
+        contributors: [],  // 贡献榜
+        contributorPagination: {  // 贡献榜分页
+            page: 1,
+            page_size: 20,
+            total: 0,
+            total_pages: 1
+        },
         loading: true,
         hasSearched: false,
         // 场次详情相关
@@ -93,19 +99,6 @@ const app = new Vue({
             let startDate, endDate;
 
             switch (this.timeRange) {
-                case 'today':
-                    startDate = new Date(today);
-                    startDate.setHours(0, 0, 0, 0);
-                    endDate = new Date();
-                    break;
-                case 'yesterday':
-                    const yesterday = new Date(today);
-                    yesterday.setDate(yesterday.getDate() - 1);
-                    startDate = new Date(yesterday);
-                    startDate.setHours(0, 0, 0, 0);
-                    endDate = new Date(yesterday);
-                    endDate.setHours(23, 59, 59, 999);
-                    break;
                 case '7days':
                     startDate = new Date(today);
                     startDate.setDate(startDate.getDate() - 7);
@@ -117,15 +110,6 @@ const app = new Vue({
                     startDate.setDate(startDate.getDate() - 30);
                     startDate.setHours(0, 0, 0, 0);
                     endDate = new Date();
-                    break;
-                case 'thisMonth':
-                    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-                    endDate = new Date();
-                    break;
-                case 'lastMonth':
-                    startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                    endDate = new Date(today.getFullYear(), today.getMonth(), 0);
-                    endDate.setHours(23, 59, 59, 999);
                     break;
                 case 'custom':
                     if (!this.customStartDate || !this.customEndDate) {
@@ -178,18 +162,8 @@ const app = new Vue({
                     this.stats = statsData.stats;
                 }
 
-                // 加载贡献榜数据
-                let contributorsUrl = `/api/rooms/contributors-by-date?${params}`;
-                if (this.selectedRoomId) {
-                    contributorsUrl += `&live_id=${this.selectedRoomId}`;
-                }
-                const contributorsResponse = await fetch(contributorsUrl);
-                const contributorsData = await contributorsResponse.json();
-                if (contributorsData.contributors) {
-                    this.contributors = contributorsData.contributors;
-                } else {
-                    this.contributors = [];
-                }
+                // 加载贡献榜数据（第一页）
+                await this.loadContributors(1);
 
                 // 如果选择了房间，加载场次列表
                 if (this.selectedRoomId) {
@@ -211,9 +185,82 @@ const app = new Vue({
                 this.loading = false;
             }
         },
+        async loadContributors(page = 1) {
+            const dateRange = this.getDateRange();
+            if (!dateRange) {
+                return;
+            }
+
+            const params = new URLSearchParams({
+                start_date: dateRange.start.split('T')[0],
+                end_date: dateRange.end.split('T')[0],
+                page: page,
+                page_size: this.contributorPagination.page_size
+            });
+
+            if (this.selectedRoomId) {
+                params.append('live_id', this.selectedRoomId);
+            }
+
+            try {
+                const response = await fetch(`/api/rooms/contributors-by-date?${params}`);
+                const data = await response.json();
+
+                if (data.contributors) {
+                    this.contributors = data.contributors;
+                }
+                if (data.page) {
+                    this.contributorPagination.page = data.page;
+                }
+                if (data.page_size) {
+                    this.contributorPagination.page_size = data.page_size;
+                }
+                if (data.total) {
+                    this.contributorPagination.total = data.total;
+                }
+                if (data.total_pages) {
+                    this.contributorPagination.total_pages = data.total_pages;
+                }
+            } catch (error) {
+                console.error('加载贡献榜失败:', error);
+            }
+        },
+        goToContributorPage(page) {
+            if (page < 1 || page > this.contributorPagination.total_pages) return;
+            this.loadContributors(page);
+        },
+        getContributorPageNumbers() {
+            const current = this.contributorPagination.page;
+            const total = this.contributorPagination.total_pages;
+            const pages = [];
+
+            if (total <= 7) {
+                for (let i = 1; i <= total; i++) {
+                    pages.push(i);
+                }
+            } else {
+                if (current <= 4) {
+                    for (let i = 1; i <= 5; i++) pages.push(i);
+                    pages.push('...');
+                    pages.push(total);
+                } else if (current >= total - 3) {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = total - 4; i <= total; i++) pages.push(i);
+                } else {
+                    pages.push(1);
+                    pages.push('...');
+                    for (let i = current - 1; i <= current + 1; i++) pages.push(i);
+                    pages.push('...');
+                    pages.push(total);
+                }
+            }
+            return pages;
+        },
         loadRoomData() {
             this.sessions = [];
             this.contributors = [];
+            this.contributorPagination = { page: 1, page_size: 20, total: 0, total_pages: 1 };
             this.hasSearched = false;
             // 加载选中房间的日期范围
             this.loadRoomDateRange();

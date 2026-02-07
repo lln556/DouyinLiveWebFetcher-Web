@@ -307,28 +307,27 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
 
     @rooms_bp.route('/contributors-by-date', methods=['GET'])
     def get_contributors_by_date():
-        """按日期范围获取贡献榜"""
+        """按日期范围获取贡献榜（支持分页）"""
         try:
             live_id = request.args.get('live_id')  # 可选，不传表示所有房间
             start_date = request.args.get('start_date')
             end_date = request.args.get('end_date')
-            limit = min(int(request.args.get('limit', 100)), 1000)
+            page = max(int(request.args.get('page', 1)), 1)
+            page_size = min(int(request.args.get('page_size', 20)), 100)
 
             # 验证日期参数
             if not start_date or not end_date:
                 return jsonify({'error': '请提供 start_date 和 end_date 参数'}), 400
 
-            contributors = data_service.get_contributors_by_date_range(
+            result = data_service.get_contributors_by_date_range(
                 live_id=live_id,
                 start_date=start_date,
                 end_date=end_date,
-                limit=limit
+                page=page,
+                page_size=page_size
             )
 
-            return jsonify({
-                'contributors': contributors,
-                'count': len(contributors)
-            })
+            return jsonify(result)
         except Exception as e:
             logger.error(f"按日期获取贡献榜失败: {e}")
             return jsonify({'error': str(e)}), 500

@@ -392,18 +392,20 @@ class DataService:
         finally:
             session.close()
 
-    def get_contributors_by_date_range(self, live_id: str = None, start_date: str = None, end_date: str = None, limit: int = 100) -> List[Dict]:
+    def get_contributors_by_date_range(self, live_id: str = None, start_date: str = None, end_date: str = None, page: int = 1, page_size: int = 20) -> Dict[str, Any]:
         """
         按日期范围获取贡献榜（从礼物消息中聚合）
         :param live_id: 房间ID，None 表示所有房间
         :param start_date: 开始日期 (YYYY-MM-DD)
         :param end_date: 结束日期 (YYYY-MM-DD)
-        :param limit: 返回数量限制
-        :return: 贡献榜列表
+        :param page: 页码（从1开始）
+        :param page_size: 每页数量
+        :return: {'contributors': [...], 'total': 总数, 'page': 当前页, 'page_size': 每页数量, 'total_pages': 总页数}
         """
         session = self.get_session()
         try:
-            from sqlalchemy import func
+            from sqlalchemy import func, literal_column
+            from collections import namedtuple
 
             # 构建查询条件
             conditions = []
@@ -425,8 +427,29 @@ class DataService:
                 )
                 conditions.append(GiftMessage.created_at <= end_datetime)
 
+            # 先获取总数（不分组）
+            count_query = session.query(
+                func.count(func.distinct(
+                    func.concat(GiftMessage.live_id, '_', GiftMessage.user_id)
+                ))
+            )
+            if conditions:
+                count_query = count_query.filter(and_(*conditions))
+            total = count_query.scalar() or 0
+
+            # 计算分页
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+            offset = (page - 1) * page_size
+
             # 聚合查询：按用户统计礼物贡献
-            query = session.query(
+            # 创建一个命名元组来存储结果
+            ContributorResult = namedtuple('ContributorResult', [
+                'live_id', 'anchor_name', 'user_id', 'user_name',
+                'contribution_value', 'gift_count', 'user_level'
+            ])
+
+            # 使用子查询获取聚合数据
+            subquery = session.query(
                 GiftMessage.live_id,
                 GiftMessage.anchor_name,
                 GiftMessage.user_id,
@@ -437,28 +460,38 @@ class DataService:
             )
 
             if conditions:
-                query = query.filter(and_(*conditions))
+                subquery = subquery.filter(and_(*conditions))
 
-            # 按房间和用户分组
-            query = query.group_by(
+            subquery = subquery.group_by(
                 GiftMessage.live_id,
                 GiftMessage.anchor_name,
                 GiftMessage.user_id,
                 GiftMessage.user_name
-            ).order_by(func.sum(GiftMessage.total_value).desc()).limit(limit)
+            ).order_by(func.sum(GiftMessage.total_value).desc())
 
-            results = query.all()
+            # 添加分页到子查询
+            subquery = subquery.limit(page_size).offset(offset)
 
-            # 转换为字典列表
+            # 执行查询
+            results = subquery.all()
+
+            # 转换为字典列表，并从 user_contributions 表获取头像
             contributors = []
             for row in results:
-                # 计算弹幕数（需要从 ChatMessage 中获取）
-                chat_conditions = []
+                # 从 user_contributions 表获取用户头像
+                user_contrib = session.query(UserContribution).filter(
+                    and_(
+                        UserContribution.live_id == row.live_id,
+                        UserContribution.user_id == row.user_id
+                    )
+                ).first()
+
+                # 计算弹幕数
+                chat_conditions = [ChatMessage.user_id == row.user_id]
                 if live_id:
                     chat_conditions.append(ChatMessage.live_id == live_id)
                 else:
                     chat_conditions.append(ChatMessage.live_id == row.live_id)
-                chat_conditions.append(ChatMessage.user_id == row.user_id)
                 if start_date:
                     chat_conditions.append(ChatMessage.created_at >= start_datetime)
                 if end_date:
@@ -476,11 +509,17 @@ class DataService:
                     'contribution_value': int(row.contribution_value),
                     'gift_count': int(row.gift_count),
                     'chat_count': chat_count,
-                    'user_avatar': None,  # GiftMessage 没有头像字段，使用默认头像
+                    'user_avatar': user_contrib.user_avatar if user_contrib else None,
                     'user_level': row.user_level
                 })
 
-            return contributors
+            return {
+                'contributors': contributors,
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            }
         finally:
             session.close()
 
