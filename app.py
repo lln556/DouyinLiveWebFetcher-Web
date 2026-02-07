@@ -133,6 +133,43 @@ def handle_join(data):
         logger.info(f"客户端 {request.sid} 加入房间 {live_id}")
         emit('joined', {'live_id': live_id})
 
+        # 主动推送当前统计数据给刚加入的客户端
+        monitored_room = room_manager.active_rooms.get(live_id)
+        if monitored_room:
+            # 房间正在监控，推送实时数据
+            rank_list = monitored_room.get_contribution_rank(100)
+
+            # 获取当前场次数据
+            current_session_data = None
+            if monitored_room.fetcher and monitored_room.fetcher.current_session_id:
+                session = data_service.get_current_live_session(live_id)
+                if session:
+                    current_session_data = {
+                        'id': session.id,
+                        'start_time': session.start_time.isoformat() if session.start_time else None,
+                        'end_time': session.end_time.isoformat() if session.end_time else None,
+                        'status': session.status,
+                        'total_income': session.total_income,
+                        'total_gift_count': session.total_gift_count,
+                        'total_chat_count': session.total_chat_count,
+                        'peak_viewer_count': session.peak_viewer_count
+                    }
+
+            # 获取房间状态
+            room = data_service.get_live_room(live_id)
+            room_status = room.status if room else None
+
+            emit(f'room_{live_id}_stats', {
+                'room_status': room_status,
+                'current_user_count': monitored_room.stats['current_user_count'],
+                'total_user_count': monitored_room.stats['total_user_count'],
+                'total_income': monitored_room.stats['total_income'],
+                'contributor_count': monitored_room.stats['contributor_count'],
+                'contributor_info': rank_list,
+                'current_session': current_session_data
+            })
+            logger.info(f"推送统计数据给加入的客户端: room_{live_id}")
+
 
 # ==================== 应用启动和关闭 ====================
 
