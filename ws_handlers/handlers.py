@@ -241,8 +241,8 @@ class WebDouyinLiveFetcher:
         gift_price = gift_msg.gift.diamond_count
         # 某些礼物的 API 返回价格不准确，按名称修正
         GIFT_PRICE_FIX = {
-            '闪烁星河': 9,
-            '点点星光': 99,
+            '闪烁星河': 99,
+            '点点星光': 9,
         }
         if gift_name in GIFT_PRICE_FIX:
             gift_price = GIFT_PRICE_FIX[gift_name]
