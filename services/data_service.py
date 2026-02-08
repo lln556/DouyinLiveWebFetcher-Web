@@ -338,7 +338,10 @@ class DataService:
 
     def update_user_contribution(self, live_id: str, anchor_name: str, user_id: str, user_name: str,
                                  gift_value: float = 0, gift_count: int = 0,
-                                 chat_count: int = 0, user_avatar: str = None) -> UserContribution:
+                                 chat_count: int = 0, user_avatar: str = None,
+                                 gender: int = None, follower_count: int = None,
+                                 following_count: int = None, age_range: int = None,
+                                 fans_club_level: int = None) -> UserContribution:
         """更新用户贡献"""
         session = self.get_session()
         try:
@@ -358,6 +361,17 @@ class DataService:
                 contribution.user_name = user_name  # 更新用户名
                 if anchor_name:
                     contribution.anchor_name = anchor_name  # 更新主播名
+                # 更新用户额外信息（只在有值时更新）
+                if gender is not None and gender > 0:
+                    contribution.gender = gender
+                if follower_count is not None and follower_count > 0:
+                    contribution.follower_count = follower_count
+                if following_count is not None and following_count > 0:
+                    contribution.following_count = following_count
+                if age_range is not None and age_range > 0:
+                    contribution.age_range = age_range
+                if fans_club_level is not None and fans_club_level > 0:
+                    contribution.fans_club_level = fans_club_level
                 contribution.updated_at = get_china_now()
             else:
                 contribution = UserContribution(
@@ -368,7 +382,12 @@ class DataService:
                     total_score=gift_value,
                     gift_count=gift_count,
                     chat_count=chat_count,
-                    user_avatar=user_avatar
+                    user_avatar=user_avatar,
+                    gender=gender if gender and gender > 0 else None,
+                    follower_count=follower_count if follower_count and follower_count > 0 else None,
+                    following_count=following_count if following_count and following_count > 0 else None,
+                    age_range=age_range if age_range and age_range > 0 else None,
+                    fans_club_level=fans_club_level if fans_club_level and fans_club_level > 0 else 0
                 )
                 session.add(contribution)
 
@@ -510,7 +529,8 @@ class DataService:
                     'gift_count': int(row.gift_count),
                     'chat_count': chat_count,
                     'user_avatar': user_contrib.user_avatar if user_contrib else None,
-                    'user_level': row.user_level
+                    'user_level': row.user_level,
+                    'fans_club_level': user_contrib.fans_club_level if user_contrib else 0
                 })
 
             return {
@@ -610,27 +630,33 @@ class DataService:
             # 2. 获取涉及到的用户ID
             user_ids = [row.user_id for row in gift_stats]
 
-            # 3. 批量查询用户头像
-            avatars = {}
+            # 3. 批量查询用户头像和粉丝团等级
+            user_extra = {}
             if user_ids:
-                user_rows = session.query(UserContribution.user_id, UserContribution.user_avatar).filter(
+                user_rows = session.query(
+                    UserContribution.user_id,
+                    UserContribution.user_avatar,
+                    UserContribution.fans_club_level
+                ).filter(
                     and_(
                         UserContribution.live_id == live_id,
                         UserContribution.user_id.in_(user_ids)
                     )
                 ).all()
-                avatars = {r.user_id: r.user_avatar for r in user_rows}
+                user_extra = {r.user_id: {'avatar': r.user_avatar, 'fans_club_level': r.fans_club_level or 0} for r in user_rows}
 
             # 4. 组装结果
             contributors = []
             for row in gift_stats:
+                extra = user_extra.get(row.user_id, {})
                 contributors.append({
                     'user_id': row.user_id,
                     'nickname': row.user_name or '',
                     'contribution_value': float(row.total_score),
                     'gift_count': row.gift_count,
                     'user_level': row.user_level,
-                    'user_avatar': avatars.get(row.user_id) # 使用查询到的头像
+                    'user_avatar': extra.get('avatar'),
+                    'fans_club_level': extra.get('fans_club_level', 0)
                 })
             return contributors
         finally:
@@ -651,6 +677,7 @@ class DataService:
                     'nickname': msg.user_name,
                     'user_level': msg.user_level,
                     'content': msg.content,
+                    'fans_club_level': msg.fans_club_level or 0,
                     'created_at': msg.created_at.isoformat() if msg.created_at else None
                 } for msg in messages]
 
@@ -668,6 +695,7 @@ class DataService:
                     'gift_count': msg.gift_count,
                     'combo_count': msg.gift_count if msg.send_type == 'combo' else 1,
                     'diamond_count': msg.total_value,
+                    'fans_club_level': msg.fans_club_level or 0,
                     'created_at': msg.created_at.isoformat() if msg.created_at else None
                 } for msg in messages]
 
@@ -1129,12 +1157,17 @@ class DataService:
             ).first()
             user_avatar = user_contrib.user_avatar if user_contrib else None
 
-            # 构建用户信息
+            # 构建用户信息（含额外信息）
             user_info = {
                 'user_id': user_id,
                 'nickname': user_name,
                 'avatar': user_avatar,
-                'level': max_level
+                'level': max_level,
+                'gender': user_contrib.gender if user_contrib else None,
+                'follower_count': user_contrib.follower_count if user_contrib else None,
+                'following_count': user_contrib.following_count if user_contrib else None,
+                'age_range': user_contrib.age_range if user_contrib else None,
+                'fans_club_level': user_contrib.fans_club_level if user_contrib else 0,
             }
 
             # 构建统计信息
@@ -1167,6 +1200,7 @@ class DataService:
                             'nickname': msg.user_name,
                             'user_level': msg.user_level,
                             'content': msg.content,
+                            'fans_club_level': msg.fans_club_level or 0,
                             'created_at': msg.created_at.isoformat() if msg.created_at else None
                         })
                 else:
@@ -1179,6 +1213,7 @@ class DataService:
                             'nickname': msg.user_name,
                             'user_level': msg.user_level,
                             'content': msg.content,
+                            'fans_club_level': msg.fans_club_level or 0,
                             'created_at': msg.created_at.isoformat() if msg.created_at else None
                         })
 
@@ -1202,6 +1237,7 @@ class DataService:
                             'gift_name': msg.gift_name,
                             'gift_count': msg.gift_count,
                             'diamond_count': msg.total_value,
+                            'fans_club_level': msg.fans_club_level or 0,
                             'created_at': msg.created_at.isoformat() if msg.created_at else None
                         })
                 else:
@@ -1216,6 +1252,7 @@ class DataService:
                             'gift_name': msg.gift_name,
                             'gift_count': msg.gift_count,
                             'diamond_count': msg.total_value,
+                            'fans_club_level': msg.fans_club_level or 0,
                             'created_at': msg.created_at.isoformat() if msg.created_at else None
                         })
 

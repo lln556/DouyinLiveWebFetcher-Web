@@ -88,6 +88,14 @@
             display: inline-block;
         }
 
+        /* 粉丝团等级图标 */
+        .fans-club-icon {
+            height: 18px;
+            vertical-align: middle;
+            margin-right: 2px;
+            display: inline-block;
+        }
+
         /* 美化标签按钮 */
         .tab-button {
             position: relative;
@@ -537,9 +545,17 @@
                                 class="w-10 h-10 rounded-full mr-2 sm:mr-3 ring-2 ring-purple-100 flex-shrink-0"
                                 alt="默认头像">
                             <div class="flex-1 min-w-0">
-                                <div class="font-semibold text-gray-800 truncate cursor-pointer hover:text-blue-600 transition-colors"
-                                     @click="openUserMessagesModal(contributor.user_id, contributor.user)"
-                                     v-text="contributor.user"></div>
+                                <div class="flex items-center gap-1">
+                                    <span class="font-semibold text-gray-800 truncate cursor-pointer hover:text-blue-600 transition-colors"
+                                         @click="openUserMessagesModal(contributor.user_id, contributor.user)"
+                                         v-text="contributor.user"></span>
+                                    <img v-if="contributor.user_level"
+                                         :src="'/level_img/level_' + contributor.user_level + '.png'"
+                                         style="height: 18px; object-fit: contain; flex-shrink: 0;">
+                                    <img v-if="contributor.fans_club_level"
+                                         :src="'/fansclub_img/fansclub_' + contributor.fans_club_level + '.png'"
+                                         style="height: 18px; object-fit: contain; flex-shrink: 0;">
+                                </div>
                                 <div class="text-sm text-gray-500">
                                     <svg class="w-3 h-3 inline mr-1 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
                                         <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
@@ -567,29 +583,35 @@
                         <div v-else class="user-avatar-large flex items-center justify-center text-2xl font-bold mr-4"
                              v-text="(userMessagesData.user.nickname || userMessagesData.user.user_id || 'U').substring(0, 1)"></div>
                         <div>
-                            <h2 class="text-xl font-bold" v-text="userMessagesData.user.nickname || userMessagesData.user.user_id"></h2>
-                            <div class="text-white text-opacity-80 text-sm">
-                                <span v-if="userMessagesData.user.level">Lv.</span>
-                                <span v-text="userMessagesData.user.level"></span>
-                            </div>
+                            <h2 class="text-xl font-bold flex items-center">
+                                <span v-text="userMessagesData.user.nickname || userMessagesData.user.user_id"></span>
+                                <img v-if="userMessagesData.user.level"
+                                     :src="'/level_img/level_' + userMessagesData.user.level + '.png'"
+                                     style="height: 20px; margin-left: 8px; object-fit: contain;">
+                                <img v-if="userMessagesData.user.fans_club_level"
+                                     :src="'/fansclub_img/fansclub_' + userMessagesData.user.fans_club_level + '.png'"
+                                     style="height: 20px; margin-left: 4px; object-fit: contain;">
+                            </h2>
                         </div>
                     </div>
                     <button @click="closeUserMessagesModal" class="user-modal-close-btn text-white text-opacity-80 hover:text-opacity-100 text-3xl leading-none">&times;</button>
                 </div>
 
-                <!-- 统计数据 -->
-                <div class="grid grid-cols-3 gap-3">
-                    <div class="user-stats-card text-center">
-                        <div class="text-white text-opacity-80 text-xs mb-1">全部消息</div>
-                        <div class="text-xl font-bold" v-text="formatNumber(userMessagesData.stats.total_messages)"></div>
+                <!-- 用户额外信息 -->
+                <div v-if="userMessagesData.user.gender || userMessagesData.user.follower_count || userMessagesData.user.following_count || userMessagesData.user.age_range"
+                     class="mt-3 text-sm text-white text-opacity-90">
+                    <div class="flex items-center gap-3 mb-1">
+                        <span v-if="userMessagesData.user.gender">
+                            <span v-text="userMessagesData.user.gender === 1 ? '♂' : userMessagesData.user.gender === 2 ? '♀' : ''"></span>
+                        </span>
+                        <span v-if="userMessagesData.user.age_range" v-text="formatAgeRange(userMessagesData.user.age_range)"></span>
                     </div>
-                    <div class="user-stats-card text-center">
-                        <div class="text-white text-opacity-80 text-xs mb-1">🎁 累计送礼</div>
-                        <div class="text-xl font-bold" v-text="formatNumber(userMessagesData.stats.total_value)"></div>
-                    </div>
-                    <div class="user-stats-card text-center">
-                        <div class="text-white text-opacity-80 text-xs mb-1">💬 弹幕数</div>
-                        <div class="text-xl font-bold" v-text="formatNumber(userMessagesData.stats.chat_count)"></div>
+                    <div v-if="userMessagesData.user.following_count || userMessagesData.user.follower_count" class="flex items-center gap-1">
+                        <span class="font-bold" v-text="formatNumber(userMessagesData.user.following_count || 0)"></span>
+                        <span class="text-white text-opacity-70">关注</span>
+                        <span class="text-white text-opacity-50 mx-1">·</span>
+                        <span class="font-bold" v-text="formatNumber(userMessagesData.user.follower_count || 0)"></span>
+                        <span class="text-white text-opacity-70">粉丝</span>
                     </div>
                 </div>
             </div>
@@ -646,7 +668,9 @@
                         <div class="flex items-center justify-between mb-1">
                             <div class="flex items-center">
                                 <img v-if="msg.user_level" :src="'/level_img/level_' + msg.user_level + '.png'"
-                                     class="h-5 mr-2" style="width: 40px; object-fit: contain;">
+                                     class="h-5 mr-1" style="width: 40px; object-fit: contain;">
+                                <img v-if="msg.fans_club_level" :src="'/fansclub_img/fansclub_' + msg.fans_club_level + '.png'"
+                                     style="height: 18px; object-fit: contain; vertical-align: middle; margin-right: 4px;">
                                 <span class="font-medium text-blue-600 text-sm" v-text="msg.nickname || msg.user_id"></span>
                             </div>
                             <span class="text-gray-400 text-xs" v-text="formatUserMessageTime(msg.created_at)"></span>

@@ -188,12 +188,25 @@ class WebDouyinLiveFetcher:
         else:
             user_id = raw_id
 
+        # 提取用户额外信息
+        fans_club_level = 0
+        if hasattr(chat_msg.user, 'fans_club') and chat_msg.user.fans_club and chat_msg.user.fans_club.data:
+            fans_club_level = chat_msg.user.fans_club.data.level or 0
+        gender = chat_msg.user.gender if hasattr(chat_msg.user, 'gender') else 0
+        follower_count = 0
+        following_count = 0
+        if hasattr(chat_msg.user, 'follow_info') and chat_msg.user.follow_info:
+            follower_count = chat_msg.user.follow_info.follower_count or 0
+            following_count = chat_msg.user.follow_info.following_count or 0
+        age_range = chat_msg.user.age_range if hasattr(chat_msg.user, 'age_range') else 0
+
         # 获取data_service（从app全局变量或monitored_room）
         data_service = self.monitored_room.manager.data_service
 
-        # 构建包含等级图标和用户名的消息内容
+        # 构建包含等级图标、粉丝团图标和用户名的消息内容
         level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
-        message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span>: {content}'
+        fansclub_tag = f'<img src="/fansclub_img/fansclub_{fans_club_level}.png" class="fans-club-icon" alt="粉丝团">' if fans_club_level > 0 else ''
+        message_content_html = f'{level_img_tag}{fansclub_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span>: {content}'
 
         is_gift_user = user in self.gift_users
 
@@ -206,7 +219,8 @@ class WebDouyinLiveFetcher:
             user_name=user,
             user_level=level,
             content=content,
-            is_gift_user=is_gift_user
+            is_gift_user=is_gift_user,
+            fans_club_level=fans_club_level
         )
 
         # 更新场次弹幕计数
@@ -216,6 +230,19 @@ class WebDouyinLiveFetcher:
                 chat_count_delta=1
             )
 
+        # 更新贡献表（弹幕计数 + 用户信息）
+        self.monitored_room.update_contribution(
+            user_id,
+            user,
+            chat_count=1,
+            user_level=level,
+            gender=gender,
+            follower_count=follower_count,
+            following_count=following_count,
+            age_range=age_range,
+            fans_club_level=fans_club_level
+        )
+
         # 通过Socket.IO推送到前端
         message_data = {
             'type': 'chat',
@@ -223,6 +250,11 @@ class WebDouyinLiveFetcher:
             'user_id': user_id,
             'content': message_content_html,
             'is_gift_user': is_gift_user,
+            'fans_club_level': fans_club_level,
+            'gender': gender,
+            'follower_count': follower_count,
+            'following_count': following_count,
+            'age_range': age_range,
         }
         self.socketio.emit(f'room_{self.live_id}', message_data, room=f'room_{self.live_id}')
         self.log.info(f"发送弹幕消息: {user}: {content}")
@@ -255,6 +287,18 @@ class WebDouyinLiveFetcher:
             user_id = f"anon_{user}_{level}"
         else:
             user_id = raw_id
+
+        # 提取用户额外信息
+        fans_club_level = 0
+        if hasattr(gift_msg.user, 'fans_club') and gift_msg.user.fans_club and gift_msg.user.fans_club.data:
+            fans_club_level = gift_msg.user.fans_club.data.level or 0
+        gender = gift_msg.user.gender if hasattr(gift_msg.user, 'gender') else 0
+        follower_count = 0
+        following_count = 0
+        if hasattr(gift_msg.user, 'follow_info') and gift_msg.user.follow_info:
+            follower_count = gift_msg.user.follow_info.follower_count or 0
+            following_count = gift_msg.user.follow_info.following_count or 0
+        age_range = gift_msg.user.age_range if hasattr(gift_msg.user, 'age_range') else 0
 
         # 获取 gift_id 和 group_id
         gift_id_str = str(gift_msg.gift_id) if hasattr(gift_msg, 'gift_id') else None
@@ -335,7 +379,8 @@ class WebDouyinLiveFetcher:
                         total_value=total_gift_value,
                         send_type='combo',
                         group_id=group_id_str,
-                        trace_id=trace_id
+                        trace_id=trace_id,
+                        fans_club_level=fans_club_level
                     )
                     if msg:
                         self.monitored_room.combo_gifts[combo_key]['db_id'] = msg.id
@@ -364,7 +409,13 @@ class WebDouyinLiveFetcher:
                     user,
                     gift_value=partial_value,
                     gift_count=partial_count,
-                    user_avatar=avatar
+                    user_avatar=avatar,
+                    user_level=level,
+                    gender=gender,
+                    follower_count=follower_count,
+                    following_count=following_count,
+                    age_range=age_range,
+                    fans_club_level=fans_club_level
                 )
 
                 # 更新场次统计
@@ -377,11 +428,12 @@ class WebDouyinLiveFetcher:
 
                 # 推送前端
                 level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
+                fansclub_tag = f'<img src="/fansclub_img/fansclub_{fans_club_level}.png" class="fans-club-icon" alt="粉丝团">' if fans_club_level > 0 else ''
                 if gift_msg.repeat_end == 1:
-                    gift_message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 连击完成！赠送了 {gift_count} 个 {gift_name} (价值{total_gift_value}钻石)'
+                    gift_message_content_html = f'{level_img_tag}{fansclub_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 连击完成！赠送了 {gift_count} 个 {gift_name} (价值{total_gift_value}钻石)'
                     is_combo_end = True
                 else:
-                    gift_message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 连击中... {gift_name}x{gift_count} (本次+{partial_count})'
+                    gift_message_content_html = f'{level_img_tag}{fansclub_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 连击中... {gift_name}x{gift_count} (本次+{partial_count})'
                     is_combo_end = False
 
                 message_data = {
@@ -394,7 +446,12 @@ class WebDouyinLiveFetcher:
                     'total_value': partial_value,
                     'content': gift_message_content_html,
                     'combo_count': current_count,
-                    'is_combo_end': is_combo_end
+                    'is_combo_end': is_combo_end,
+                    'fans_club_level': fans_club_level,
+                    'gender': gender,
+                    'follower_count': follower_count,
+                    'following_count': following_count,
+                    'age_range': age_range,
                 }
                 self.socketio.emit(f'room_{self.live_id}', message_data, room=f'room_{self.live_id}')
                 return
@@ -426,7 +483,13 @@ class WebDouyinLiveFetcher:
                 user,
                 gift_value=total_gift_value,
                 gift_count=gift_count,
-                user_avatar=avatar
+                user_avatar=avatar,
+                user_level=level,
+                gender=gender,
+                follower_count=follower_count,
+                following_count=following_count,
+                age_range=age_range,
+                fans_club_level=fans_club_level
             )
 
             data_service.save_gift_message(
@@ -443,7 +506,8 @@ class WebDouyinLiveFetcher:
                 total_value=total_gift_value,
                 send_type='normal',
                 group_id=group_id_str,
-                trace_id=trace_id
+                trace_id=trace_id,
+                fans_club_level=fans_club_level
             )
 
             if self.current_session_id:
@@ -454,7 +518,8 @@ class WebDouyinLiveFetcher:
                 )
 
             level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
-            gift_message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 赠送了 {gift_count} 个 {gift_name} (价值{gift_price}钻石)'
+            fansclub_tag = f'<img src="/fansclub_img/fansclub_{fans_club_level}.png" class="fans-club-icon" alt="粉丝团">' if fans_club_level > 0 else ''
+            gift_message_content_html = f'{level_img_tag}{fansclub_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 赠送了 {gift_count} 个 {gift_name} (价值{gift_price}钻石)'
 
             message_data = {
                 'type': 'gift',
@@ -464,7 +529,12 @@ class WebDouyinLiveFetcher:
                 'gift_count': gift_count,
                 'gift_price': gift_price,
                 'total_value': total_gift_value,
-                'content': gift_message_content_html
+                'content': gift_message_content_html,
+                'fans_club_level': fans_club_level,
+                'gender': gender,
+                'follower_count': follower_count,
+                'following_count': following_count,
+                'age_range': age_range,
             }
             self.socketio.emit(f'room_{self.live_id}', message_data, room=f'room_{self.live_id}')
             self.log.info(f"发送礼物消息: {user} 送出了 {gift_name}x{gift_count},单价{gift_price},总价值{total_gift_value}")
@@ -483,7 +553,13 @@ class WebDouyinLiveFetcher:
             user,
             gift_value=total_gift_value,
             gift_count=gift_count,
-            user_avatar=avatar
+            user_avatar=avatar,
+            user_level=level,
+            gender=gender,
+            follower_count=follower_count,
+            following_count=following_count,
+            age_range=age_range,
+            fans_club_level=fans_club_level
         )
 
         data_service.save_gift_message(
@@ -500,7 +576,8 @@ class WebDouyinLiveFetcher:
             total_value=total_gift_value,
             send_type='normal',
             group_id=group_id_str,
-            trace_id=trace_id
+            trace_id=trace_id,
+            fans_club_level=fans_club_level
         )
 
         if self.current_session_id:
@@ -511,7 +588,8 @@ class WebDouyinLiveFetcher:
             )
 
         level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
-        gift_message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 赠送了 {gift_count} 个 {gift_name} (价值{gift_price}钻石)'
+        fansclub_tag = f'<img src="/fansclub_img/fansclub_{fans_club_level}.png" class="fans-club-icon" alt="粉丝团">' if fans_club_level > 0 else ''
+        gift_message_content_html = f'{level_img_tag}{fansclub_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 赠送了 {gift_count} 个 {gift_name} (价值{gift_price}钻石)'
 
         message_data = {
             'type': 'gift',
@@ -521,7 +599,12 @@ class WebDouyinLiveFetcher:
             'gift_count': gift_count,
             'gift_price': gift_price,
             'total_value': total_gift_value,
-            'content': gift_message_content_html
+            'content': gift_message_content_html,
+            'fans_club_level': fans_club_level,
+            'gender': gender,
+            'follower_count': follower_count,
+            'following_count': following_count,
+            'age_range': age_range,
         }
         self.socketio.emit(f'room_{self.live_id}', message_data, room=f'room_{self.live_id}')
         self.log.info(f"发送礼物消息: {user} 送出了 {gift_name}x{gift_count},单价{gift_price},总价值{total_gift_value}")

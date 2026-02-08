@@ -7,6 +7,7 @@ from datetime import datetime
 
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_socketio import SocketIO, emit, join_room
+from sqlalchemy import inspect as sa_inspect, text
 
 import config
 from models.database import Base
@@ -36,6 +37,29 @@ data_service = DataService(config.DATABASE_URL)
 # 创建数据库表
 data_service.create_tables()
 
+# 数据库迁移：添加新列
+def migrate_database(engine):
+    """检查并添加新增的数据库列"""
+    inspector = sa_inspect(engine)
+    migrations = [
+        ('chat_messages', 'fans_club_level', 'INTEGER DEFAULT 0'),
+        ('gift_messages', 'fans_club_level', 'INTEGER DEFAULT 0'),
+        ('user_contributions', 'gender', 'INTEGER'),
+        ('user_contributions', 'follower_count', 'INTEGER'),
+        ('user_contributions', 'following_count', 'INTEGER'),
+        ('user_contributions', 'age_range', 'INTEGER'),
+        ('user_contributions', 'fans_club_level', 'INTEGER DEFAULT 0'),
+    ]
+    with engine.connect() as conn:
+        for table, column, col_type in migrations:
+            columns = [c['name'] for c in inspector.get_columns(table)]
+            if column not in columns:
+                conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}'))
+                logger.info(f"数据库迁移: {table} 添加列 {column} ({col_type})")
+        conn.commit()
+
+migrate_database(data_service.engine)
+
 # 初始化房间管理器
 room_manager = RoomManager(data_service, socketio)
 
@@ -50,6 +74,12 @@ scheduler_service = SchedulerService(room_manager, data_service)
 def serve_level_img(filename):
     """提供等级图标静态文件"""
     return send_from_directory('data/level_img', filename)
+
+
+@app.route('/fansclub_img/<path:filename>')
+def serve_fansclub_img(filename):
+    """提供粉丝团等级图标静态文件"""
+    return send_from_directory('data/fansclub_img', filename)
 
 
 @app.route('/')

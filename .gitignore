@@ -75,8 +75,6 @@ node_modules/
 *.db
 *.sqlite
 *.sqlite3
-data/level_img/*
-!data/level_img/.gitkeep
 data/*.db
 
 # Test coverage

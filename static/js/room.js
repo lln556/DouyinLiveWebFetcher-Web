@@ -173,8 +173,9 @@ const app = new Vue({
                 if (chatData.chats) {
                     allMessages.push(...chatData.chats.map(msg => {
                         const levelImg = msg.user_level ? `<img src="/level_img/level_${msg.user_level}.png" class="user-level-icon" alt="等级">` : '';
+                        const fansClubTag = msg.fans_club_level > 0 ? `<img src="/fansclub_img/fansclub_${msg.fans_club_level}.png" class="fans-club-icon" alt="粉丝团">` : '';
                         const userName = msg.nickname || msg.user_id;
-                        const content = `${levelImg} <span class="user-highlight" data-user-id="${msg.user_id}" data-user-name="${userName}">${userName}</span>: ${msg.content}`;
+                        const content = `${levelImg}${fansClubTag} <span class="user-highlight" data-user-id="${msg.user_id}" data-user-name="${userName}">${userName}</span>: ${msg.content}`;
                         return {
                             type: 'chat',
                             content: content,
@@ -190,8 +191,9 @@ const app = new Vue({
                 if (giftData.gifts) {
                     allMessages.push(...giftData.gifts.map(msg => {
                         const levelImg = msg.user_level ? `<img src="/level_img/level_${msg.user_level}.png" class="user-level-icon" alt="等级">` : '';
+                        const fansClubTag = msg.fans_club_level > 0 ? `<img src="/fansclub_img/fansclub_${msg.fans_club_level}.png" class="fans-club-icon" alt="粉丝团">` : '';
                         const userName = msg.nickname || msg.user_id;
-                        const content = `${levelImg} <span class="user-highlight" data-user-id="${msg.user_id}" data-user-name="${userName}">${userName}</span> 赠送了 ${msg.gift_count} 个 ${msg.gift_name} (价值${msg.diamond_count}钻石)`;
+                        const content = `${levelImg}${fansClubTag} <span class="user-highlight" data-user-id="${msg.user_id}" data-user-name="${userName}">${userName}</span> 赠送了 ${msg.gift_count} 个 ${msg.gift_name} (价值${msg.diamond_count}钻石)`;
                         return {
                             type: 'gift',
                             content: content,
@@ -284,7 +286,9 @@ const app = new Vue({
                         user_id: c.user_id,
                         user: c.nickname || c.user_id,
                         score: c.contribution_value,
-                        avatar: c.user_avatar
+                        avatar: c.user_avatar,
+                        user_level: c.user_level || 0,
+                        fans_club_level: c.fans_club_level || 0
                     }));
                     this.stats.contributorCount = data.contributors.length;
                 }
@@ -577,6 +581,10 @@ const app = new Vue({
                 minute: '2-digit',
                 second: '2-digit'
             });
+        },
+        formatAgeRange(val) {
+            const map = {0: '-', 1: '<18', 2: '18-23', 3: '24-30', 4: '31-40', 5: '41-50', 6: '>50'};
+            return map[val] || '-';
         }
     }
 });

@@ -630,6 +630,10 @@ const app = new Vue({
                 minute: '2-digit',
                 second: '2-digit'
             });
+        },
+        formatAgeRange(val) {
+            const map = {0: '-', 1: '<18', 2: '18-23', 3: '24-30', 4: '31-40', 5: '41-50', 6: '>50'};
+            return map[val] || '-';
         }
     }
 });

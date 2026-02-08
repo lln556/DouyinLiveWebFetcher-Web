@@ -416,14 +416,19 @@ class MonitoredRoom:
         return False
 
     def update_contribution(self, user_id: str, user_name: str, gift_value: float = 0,
-                           gift_count: int = 0, chat_count: int = 0, user_avatar: str = None):
+                           gift_count: int = 0, chat_count: int = 0, user_avatar: str = None,
+                           gender: int = None, follower_count: int = None,
+                           following_count: int = None, age_range: int = None,
+                           fans_club_level: int = None, user_level: int = None):
         """更新用户贡献"""
         if user_id not in self.user_contributions:
             self.user_contributions[user_id] = {
                 'user_name': user_name,
                 'score': 0,
                 'avatar': user_avatar,
-                'gift_count': 0
+                'gift_count': 0,
+                'fans_club_level': fans_club_level or 0,
+                'user_level': user_level or 0
             }
             logger.info(f"[新贡献用户] {user_id}={user_name}, avatar={user_avatar}, gift_value={gift_value}")
         else:
@@ -433,6 +438,10 @@ class MonitoredRoom:
             self.user_contributions[user_id]['user_name'] = user_name
             if user_avatar:
                 self.user_contributions[user_id]['avatar'] = user_avatar
+            if fans_club_level and fans_club_level > 0:
+                self.user_contributions[user_id]['fans_club_level'] = fans_club_level
+            if user_level and user_level > 0:
+                self.user_contributions[user_id]['user_level'] = user_level
             if old_name != user_name or old_avatar != user_avatar:
                 logger.info(f"[更新用户信息] {user_id}: {old_name} -> {user_name}, avatar: {old_avatar} -> {user_avatar}")
 
@@ -448,7 +457,12 @@ class MonitoredRoom:
             user_name,
             gift_value=gift_value,
             gift_count=1,
-            user_avatar=user_avatar
+            user_avatar=user_avatar,
+            gender=gender,
+            follower_count=follower_count,
+            following_count=following_count,
+            age_range=age_range,
+            fans_club_level=fans_club_level
         )
 
     def get_contribution_rank(self, limit: int = 100) -> list:
@@ -459,7 +473,9 @@ class MonitoredRoom:
                     'user_id': k,
                     'user': v['user_name'],
                     'score': v['score'],
-                    'avatar': v['avatar']
+                    'avatar': v['avatar'],
+                    'fans_club_level': v.get('fans_club_level', 0),
+                    'user_level': v.get('user_level', 0)
                 }
                 for k, v in self.user_contributions.items()
                 if v['score'] > 0  # 只包含贡献值大于0的用户（送过礼物的）

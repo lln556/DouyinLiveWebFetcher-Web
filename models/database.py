@@ -61,6 +61,7 @@ class ChatMessage(Base):
     user_level = Column(Integer, nullable=True, comment='用户等级')
     content = Column(Text, nullable=False, comment='弹幕内容')
     is_gift_user = Column(Boolean, nullable=False, default=False, comment='是否是送礼用户')
+    fans_club_level = Column(Integer, nullable=True, default=0, comment='粉丝团等级')
     created_at = Column(DateTime, nullable=False, default=get_china_now, index=True, comment='创建时间')
 
     # 关系
@@ -94,6 +95,7 @@ class GiftMessage(Base):
     send_type = Column(String(10), nullable=False, default='normal', comment='发送类型: normal/combo')
     group_id = Column(String(50), nullable=True, comment='连击组ID')
     trace_id = Column(String(100), nullable=True, unique=True, comment='消息追踪ID，用于去重')
+    fans_club_level = Column(Integer, nullable=True, default=0, comment='粉丝团等级')
     created_at = Column(DateTime, nullable=False, default=get_china_now, index=True, comment='创建时间')
 
     # 关系
@@ -147,6 +149,11 @@ class UserContribution(Base):
     gift_count = Column(Integer, nullable=False, default=0, comment='送礼次数')
     chat_count = Column(Integer, nullable=False, default=0, comment='弹幕次数')
     user_avatar = Column(String(500), nullable=True, comment='用户头像URL')
+    gender = Column(Integer, nullable=True, comment='性别: 0未知 1男 2女')
+    follower_count = Column(Integer, nullable=True, comment='粉丝数')
+    following_count = Column(Integer, nullable=True, comment='关注数')
+    age_range = Column(Integer, nullable=True, comment='年龄段')
+    fans_club_level = Column(Integer, nullable=True, default=0, comment='粉丝团等级')
     created_at = Column(DateTime, nullable=False, default=get_china_now, comment='首次贡献时间')
     updated_at = Column(DateTime, nullable=False, default=get_china_now, onupdate=get_china_now, comment='更新时间')
 
