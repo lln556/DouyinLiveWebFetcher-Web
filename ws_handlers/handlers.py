@@ -637,7 +637,11 @@ class WebDouyinLiveFetcher:
             self.monitored_room.stats['total_user_count'] = total_numeric
             self.monitored_room.last_stats['total_user_count'] = total_numeric
 
-        self.monitored_room.stats['contributor_count'] = len(self.monitored_room.user_contributions)
+        # 只统计当前场次送过礼物的用户数量（score > 0）
+        self.monitored_room.stats['contributor_count'] = sum(
+            1 for v in self.monitored_room.user_contributions.values()
+            if v['score'] > 0
+        )
 
         # 获取贡献榜
         rank_list = self.monitored_room.get_contribution_rank(100)
