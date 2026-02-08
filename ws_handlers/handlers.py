@@ -193,7 +193,7 @@ class WebDouyinLiveFetcher:
 
         # 构建包含等级图标和用户名的消息内容
         level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
-        message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span>: {content}'
+        message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span>: {content}'
 
         is_gift_user = user in self.gift_users
 
@@ -220,6 +220,7 @@ class WebDouyinLiveFetcher:
         message_data = {
             'type': 'chat',
             'user': user,
+            'user_id': user_id,
             'content': message_content_html,
             'is_gift_user': is_gift_user,
         }
@@ -377,15 +378,16 @@ class WebDouyinLiveFetcher:
                 # 推送前端
                 level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
                 if gift_msg.repeat_end == 1:
-                    gift_message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span> 连击完成！赠送了 {gift_count} 个 {gift_name} (价值{total_gift_value}钻石)'
+                    gift_message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 连击完成！赠送了 {gift_count} 个 {gift_name} (价值{total_gift_value}钻石)'
                     is_combo_end = True
                 else:
-                    gift_message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span> 连击中... {gift_name}x{gift_count} (本次+{partial_count})'
+                    gift_message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 连击中... {gift_name}x{gift_count} (本次+{partial_count})'
                     is_combo_end = False
 
                 message_data = {
                     'type': 'gift',
                     'user': user,
+                    'user_id': user_id,
                     'gift_name': gift_name,
                     'gift_count': partial_count,
                     'gift_price': gift_price,
@@ -452,11 +454,12 @@ class WebDouyinLiveFetcher:
                 )
 
             level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
-            gift_message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span> 赠送了 {gift_count} 个 {gift_name} (价值{gift_price}钻石)'
+            gift_message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 赠送了 {gift_count} 个 {gift_name} (价值{gift_price}钻石)'
 
             message_data = {
                 'type': 'gift',
                 'user': user,
+                'user_id': user_id,
                 'gift_name': gift_name,
                 'gift_count': gift_count,
                 'gift_price': gift_price,
@@ -508,11 +511,12 @@ class WebDouyinLiveFetcher:
             )
 
         level_img_tag = f'<img src="/level_img/level_{level}.png" class="user-level-icon" alt="等级">' if level else ''
-        gift_message_content_html = f'{level_img_tag} <span class="user-highlight">{user}</span> 赠送了 {gift_count} 个 {gift_name} (价值{gift_price}钻石)'
+        gift_message_content_html = f'{level_img_tag} <span class="user-highlight" data-user-id="{user_id}" data-user-name="{user}">{user}</span> 赠送了 {gift_count} 个 {gift_name} (价值{gift_price}钻石)'
 
         message_data = {
             'type': 'gift',
             'user': user,
+            'user_id': user_id,
             'gift_name': gift_name,
             'gift_count': gift_count,
             'gift_price': gift_price,

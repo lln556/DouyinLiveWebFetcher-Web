@@ -576,4 +576,44 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
             logger.error(f"获取场次详情失败: {e}")
             return jsonify({'error': str(e)}), 500
 
+    @rooms_bp.route('/<live_id>/user-messages', methods=['GET'])
+    def get_user_messages(live_id):
+        """获取用户在指定房间、场次或日期范围内的消息记录"""
+        try:
+            # 获取参数
+            user_id = request.args.get('user_id')
+            if not user_id:
+                return jsonify({'error': '请提供 user_id 参数'}), 400
+
+            session_id = request.args.get('session_id')
+            if session_id:
+                session_id = int(session_id)
+
+            start_date = request.args.get('start_date')
+            end_date = request.args.get('end_date')
+            message_type = request.args.get('type', 'all')  # all/chat/gift
+            page = max(int(request.args.get('page', 1)), 1)
+            page_size = min(int(request.args.get('limit', 50)), 200)
+            offset = (page - 1) * page_size
+
+            # 调用数据服务获取用户消息
+            result = data_service.get_user_messages(
+                live_id=live_id,
+                user_id=user_id,
+                session_id=session_id,
+                start_date=start_date,
+                end_date=end_date,
+                message_type=message_type,
+                limit=page_size,
+                offset=offset
+            )
+
+            logger.info(f"获取用户消息: live_id={live_id}, user_id={user_id}, session_id={session_id}, "
+                       f"type={message_type}, page={page}, total={result['pagination']['total']}")
+
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"获取用户消息失败: {e}")
+            return jsonify({'error': str(e)}), 500
+
     return rooms_bp

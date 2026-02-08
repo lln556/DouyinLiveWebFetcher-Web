@@ -24,7 +24,31 @@ const app = new Vue({
         initialMessageCount: 0,  // 记录初始加载的消息数量
         isAtBottom: true,  // 用户是否在底部
         unreadCount: 0,  // 未读消息数量
-        isUserScrolling: false  // 用户是否正在手动滚动
+        isUserScrolling: false,  // 用户是否正在手动滚动
+        // 用户消息模态框
+        showUserMessagesModal: false,
+        userMessagesLoading: false,
+        userMessagesTab: 'all',
+        userMessagesData: {
+            user: {},
+            stats: {
+                total_messages: 0,
+                chat_count: 0,
+                gift_count: 0,
+                total_value: 0
+            },
+            messages: [],
+            pagination: {
+                page: 1,
+                page_size: 50,
+                total: 0,
+                total_pages: 1
+            }
+        },
+        userMessagesQuery: {
+            user_id: null,
+            session_id: null  // 用于记录当前查询的场次ID
+        }
     },
     computed: {
         filteredMessages() {
@@ -58,6 +82,13 @@ const app = new Vue({
             const container = document.querySelector('.messages-container');
             if (container) {
                 container.addEventListener('scroll', this.handleScroll);
+                // 点击消息中的用户名，打开用户消息模态框
+                container.addEventListener('click', (e) => {
+                    const userEl = e.target.closest('.user-highlight');
+                    if (userEl && userEl.dataset.userId) {
+                        this.openUserMessagesModal(userEl.dataset.userId, userEl.dataset.userName || userEl.textContent);
+                    }
+                });
             }
         });
 
@@ -129,8 +160,8 @@ const app = new Vue({
 
                 // 并行加载弹幕和礼物
                 const [chatResponse, giftResponse] = await Promise.all([
-                    fetch(`/api/sessions/${sessionId}?type=chat&limit=10000`),
-                    fetch(`/api/sessions/${sessionId}?type=gift&limit=10000`)
+                    fetch(`/api/rooms/sessions/${sessionId}?type=chat&limit=10000`),
+                    fetch(`/api/rooms/sessions/${sessionId}?type=gift&limit=10000`)
                 ]);
 
                 const [chatData, giftData] = await Promise.all([
@@ -140,20 +171,36 @@ const app = new Vue({
 
                 // 合并弹幕消息
                 if (chatData.chats) {
-                    allMessages.push(...chatData.chats.map(msg => ({
-                        type: 'chat',
-                        content: msg.display_content || msg.content,
-                        timestamp: new Date(msg.created_at)
-                    })));
+                    allMessages.push(...chatData.chats.map(msg => {
+                        const levelImg = msg.user_level ? `<img src="/level_img/level_${msg.user_level}.png" class="user-level-icon" alt="等级">` : '';
+                        const userName = msg.nickname || msg.user_id;
+                        const content = `${levelImg} <span class="user-highlight" data-user-id="${msg.user_id}" data-user-name="${userName}">${userName}</span>: ${msg.content}`;
+                        return {
+                            type: 'chat',
+                            content: content,
+                            user_id: msg.user_id,
+                            user: msg.nickname,
+                            is_gift_user: false,
+                            timestamp: new Date(msg.created_at)
+                        };
+                    }));
                 }
 
                 // 合并礼物消息
                 if (giftData.gifts) {
-                    allMessages.push(...giftData.gifts.map(msg => ({
-                        type: 'gift',
-                        content: msg.display_content || `${msg.user_name} 赠送了 ${msg.gift_name} x${msg.gift_count}`,
-                        timestamp: new Date(msg.created_at)
-                    })));
+                    allMessages.push(...giftData.gifts.map(msg => {
+                        const levelImg = msg.user_level ? `<img src="/level_img/level_${msg.user_level}.png" class="user-level-icon" alt="等级">` : '';
+                        const userName = msg.nickname || msg.user_id;
+                        const content = `${levelImg} <span class="user-highlight" data-user-id="${msg.user_id}" data-user-name="${userName}">${userName}</span> 赠送了 ${msg.gift_count} 个 ${msg.gift_name} (价值${msg.diamond_count}钻石)`;
+                        return {
+                            type: 'gift',
+                            content: content,
+                            user_id: msg.user_id,
+                            user: msg.nickname,
+                            is_gift_user: true,
+                            timestamp: new Date(msg.created_at)
+                        };
+                    }));
                 }
 
                 // 按时间排序
@@ -234,6 +281,7 @@ const app = new Vue({
                     // 转换格式为 stats.contributorInfo 需要的格式
                     this.stats.contributorInfo = data.contributors.map((c, index) => ({
                         rank: index + 1,
+                        user_id: c.user_id,
                         user: c.nickname || c.user_id,
                         score: c.contribution_value,
                         avatar: c.user_avatar
@@ -289,6 +337,7 @@ const app = new Vue({
             // 添加到消息列表（新消息在末尾）
             this.messages.push({
                 ...data,
+                user_id: data.user_id || null,
                 timestamp: new Date()
             });
 
@@ -416,6 +465,118 @@ const app = new Vue({
             if (rank === 2) return 'rank-2';
             if (rank === 3) return 'rank-3';
             return 'rank-other';
+        },
+        // 用户消息模态框方法
+        async openUserMessagesModal(userId, userName, sessionId = null) {
+            this.showUserMessagesModal = true;
+            this.userMessagesLoading = true;
+            this.userMessagesTab = 'all';
+            this.userMessagesQuery.user_id = userId;
+            this.userMessagesQuery.session_id = sessionId || (this.currentSession ? this.currentSession.id : null);
+
+            // 重置数据
+            this.userMessagesData = {
+                user: {
+                    user_id: userId,
+                    nickname: userName
+                },
+                stats: {
+                    total_messages: 0,
+                    chat_count: 0,
+                    gift_count: 0,
+                    total_value: 0
+                },
+                messages: [],
+                pagination: {
+                    page: 1,
+                    page_size: 50,
+                    total: 0,
+                    total_pages: 1
+                }
+            };
+
+            await this.loadUserMessages();
+        },
+        closeUserMessagesModal() {
+            this.showUserMessagesModal = false;
+            this.userMessagesData = {
+                user: {},
+                stats: {
+                    total_messages: 0,
+                    chat_count: 0,
+                    gift_count: 0,
+                    total_value: 0
+                },
+                messages: [],
+                pagination: {
+                    page: 1,
+                    page_size: 50,
+                    total: 0,
+                    total_pages: 1
+                }
+            };
+            this.userMessagesQuery = {
+                user_id: null,
+                session_id: null
+            };
+        },
+        async loadUserMessages() {
+            if (!this.userMessagesQuery.user_id) return;
+
+            this.userMessagesLoading = true;
+            try {
+                const params = new URLSearchParams({
+                    user_id: this.userMessagesQuery.user_id,
+                    type: this.userMessagesTab,
+                    page: this.userMessagesData.pagination.page,
+                    limit: this.userMessagesData.pagination.page_size
+                });
+
+                if (this.userMessagesQuery.session_id) {
+                    params.append('session_id', this.userMessagesQuery.session_id);
+                }
+
+                const response = await fetch(`/api/rooms/${this.liveId}/user-messages?${params}`);
+                const data = await response.json();
+
+                if (data.user) {
+                    this.userMessagesData.user = data.user;
+                }
+                if (data.stats) {
+                    this.userMessagesData.stats = data.stats;
+                }
+                if (data.messages) {
+                    this.userMessagesData.messages = data.messages;
+                }
+                if (data.pagination) {
+                    this.userMessagesData.pagination = data.pagination;
+                }
+            } catch (error) {
+                console.error('加载用户消息失败:', error);
+            } finally {
+                this.userMessagesLoading = false;
+            }
+        },
+        async switchUserMessagesTab(tab) {
+            if (this.userMessagesTab === tab) return;
+            this.userMessagesTab = tab;
+            this.userMessagesData.pagination.page = 1;
+            await this.loadUserMessages();
+        },
+        async userMessagesGoToPage(page) {
+            const pagination = this.userMessagesData.pagination;
+            if (page < 1 || page > pagination.total_pages) return;
+            pagination.page = page;
+            await this.loadUserMessages();
+        },
+        formatUserMessageTime(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            return d.toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
         }
     }
 });

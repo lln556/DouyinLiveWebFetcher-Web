@@ -35,7 +35,34 @@ const app = new Vue({
             chats: { page: 1, page_size: 50, total: 0, total_pages: 1 },
             gifts: { page: 1, page_size: 50, total: 0, total_pages: 1 }
         },
-        sessionDetailCounts: { chat_count: 0, gift_count: 0 }
+        sessionDetailCounts: { chat_count: 0, gift_count: 0 },
+        // 用户消息模态框
+        showUserMessagesModal: false,
+        userMessagesLoading: false,
+        userMessagesTab: 'all',
+        userMessagesData: {
+            user: {},
+            stats: {
+                total_messages: 0,
+                chat_count: 0,
+                gift_count: 0,
+                total_value: 0
+            },
+            messages: [],
+            pagination: {
+                page: 1,
+                page_size: 50,
+                total: 0,
+                total_pages: 1
+            }
+        },
+        userMessagesQuery: {
+            user_id: null,
+            live_id: null,
+            session_id: null,
+            start_date: null,
+            end_date: null
+        }
     },
     async mounted() {
         await Promise.all([
@@ -469,6 +496,140 @@ const app = new Vue({
                 case 'ended': return '已结束';
                 default: return status;
             }
+        },
+        // 用户消息模态框方法
+        async openUserMessagesModal(userId, userName, options = {}) {
+            this.showUserMessagesModal = true;
+            this.userMessagesLoading = true;
+            this.userMessagesTab = 'all';
+
+            // 设置查询参数
+            this.userMessagesQuery = {
+                user_id: userId,
+                live_id: options.live_id || this.selectedRoomId,
+                session_id: options.session_id || null,
+                start_date: options.start_date || null,
+                end_date: options.end_date || null
+            };
+
+            // 如果没有指定日期范围，使用当前筛选的日期范围
+            if (!this.userMessagesQuery.start_date || !this.userMessagesQuery.end_date) {
+                const dateRange = this.getDateRange();
+                if (dateRange) {
+                    this.userMessagesQuery.start_date = dateRange.start;
+                    this.userMessagesQuery.end_date = dateRange.end;
+                }
+            }
+
+            // 重置数据
+            this.userMessagesData = {
+                user: {
+                    user_id: userId,
+                    nickname: userName
+                },
+                stats: {
+                    total_messages: 0,
+                    chat_count: 0,
+                    gift_count: 0,
+                    total_value: 0
+                },
+                messages: [],
+                pagination: {
+                    page: 1,
+                    page_size: 50,
+                    total: 0,
+                    total_pages: 1
+                }
+            };
+
+            await this.loadUserMessages();
+        },
+        closeUserMessagesModal() {
+            this.showUserMessagesModal = false;
+            this.userMessagesData = {
+                user: {},
+                stats: {
+                    total_messages: 0,
+                    chat_count: 0,
+                    gift_count: 0,
+                    total_value: 0
+                },
+                messages: [],
+                pagination: {
+                    page: 1,
+                    page_size: 50,
+                    total: 0,
+                    total_pages: 1
+                }
+            };
+            this.userMessagesQuery = {
+                user_id: null,
+                live_id: null,
+                session_id: null,
+                start_date: null,
+                end_date: null
+            };
+        },
+        async loadUserMessages() {
+            if (!this.userMessagesQuery.user_id || !this.userMessagesQuery.live_id) return;
+
+            this.userMessagesLoading = true;
+            try {
+                const params = new URLSearchParams({
+                    user_id: this.userMessagesQuery.user_id,
+                    type: this.userMessagesTab,
+                    page: this.userMessagesData.pagination.page,
+                    limit: this.userMessagesData.pagination.page_size
+                });
+
+                if (this.userMessagesQuery.session_id) {
+                    params.append('session_id', this.userMessagesQuery.session_id);
+                } else if (this.userMessagesQuery.start_date && this.userMessagesQuery.end_date) {
+                    params.append('start_date', this.userMessagesQuery.start_date);
+                    params.append('end_date', this.userMessagesQuery.end_date);
+                }
+
+                const response = await fetch(`/api/rooms/${this.userMessagesQuery.live_id}/user-messages?${params}`);
+                const data = await response.json();
+
+                if (data.user) {
+                    this.userMessagesData.user = data.user;
+                }
+                if (data.stats) {
+                    this.userMessagesData.stats = data.stats;
+                }
+                if (data.messages) {
+                    this.userMessagesData.messages = data.messages;
+                }
+                if (data.pagination) {
+                    this.userMessagesData.pagination = data.pagination;
+                }
+            } catch (error) {
+                console.error('加载用户消息失败:', error);
+            } finally {
+                this.userMessagesLoading = false;
+            }
+        },
+        async switchUserMessagesTab(tab) {
+            if (this.userMessagesTab === tab) return;
+            this.userMessagesTab = tab;
+            this.userMessagesData.pagination.page = 1;
+            await this.loadUserMessages();
+        },
+        async userMessagesGoToPage(page) {
+            const pagination = this.userMessagesData.pagination;
+            if (page < 1 || page > pagination.total_pages) return;
+            pagination.page = page;
+            await this.loadUserMessages();
+        },
+        formatUserMessageTime(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            return d.toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
         }
     }
 });

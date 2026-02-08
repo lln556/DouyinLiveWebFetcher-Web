@@ -51,6 +51,144 @@
         .contributor-table::-webkit-scrollbar-thumb:hover {
             background: #a0aec0;
         }
+        /* 用户消息模态框样式 */
+        .user-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            animation: fadeIn 0.2s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        .user-modal-content {
+            background: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 85vh;
+            overflow-y: auto;
+            animation: slideIn 0.2s ease-out;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        .user-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 24px;
+            border-radius: 16px 16px 0 0;
+            color: white;
+        }
+        .user-avatar-large {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .user-stats-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 12px 16px;
+            backdrop-filter: blur(10px);
+        }
+        .user-tab-button {
+            padding: 12px 20px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+            color: #6B7280;
+        }
+        .user-tab-button:hover {
+            background: rgba(0, 0, 0, 0.03);
+        }
+        .user-tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: linear-gradient(to top, rgba(102, 126, 234, 0.08), transparent);
+        }
+        .user-message-card {
+            padding: 14px 18px;
+            margin: 10px 0;
+            border-radius: 12px;
+            transition: all 0.2s ease;
+        }
+        .user-message-card:hover {
+            transform: translateX(4px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        .user-chat-card {
+            background: linear-gradient(135deg, #E3F2FD 0%, #F3E5F5 100%);
+            border-left: 4px solid #2196F3;
+        }
+        .user-gift-card {
+            background: linear-gradient(135deg, #FCE4EC 0%, #FFF3E0 100%);
+            border-left: 4px solid #E91E63;
+        }
+        .user-messages-body {
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+        .user-messages-list {
+            flex: 1;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #CBD5E0 #EDF2F7;
+        }
+        .user-messages-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .user-messages-list::-webkit-scrollbar-track {
+            background: #EDF2F7;
+            border-radius: 3px;
+        }
+        .user-messages-list::-webkit-scrollbar-thumb {
+            background-color: #CBD5E0;
+            border-radius: 3px;
+        }
+        .user-messages-placeholder {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .user-messages-fade {
+            animation: userMsgFadeIn 0.2s ease-out;
+        }
+        @keyframes userMsgFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .user-modal-close-btn {
+            transition: all 0.2s ease;
+        }
+        .user-modal-close-btn:hover {
+            transform: rotate(90deg);
+        }
+        .clickable-user {
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        .clickable-user:hover {
+            color: #3B82F6;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -211,7 +349,9 @@
                                             <img v-if="contributor.user_avatar" :src="contributor.user_avatar" class="w-8 h-8 rounded-full mr-2 object-cover">
                                             <div v-else class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs mr-2" v-text="(contributor.nickname || contributor.user_id || '').substring(0, 1)"></div>
                                             <div class="min-w-0">
-                                                <div class="text-sm font-medium text-gray-900 truncate" v-text="contributor.nickname || contributor.user_id"></div>
+                                                <div class="text-sm font-medium text-gray-900 truncate clickable-user"
+                                                     @click="openUserMessagesModal(contributor.user_id, contributor.nickname || contributor.user_id, { live_id: contributor.live_id })"
+                                                     v-text="contributor.nickname || contributor.user_id"></div>
                                             </div>
                                         </div>
                                     </td>
@@ -413,7 +553,9 @@
                                 <div v-for="chat in sessionDetailChats" :key="chat.id" class="bg-gray-50 rounded p-3">
                                     <div class="flex items-center gap-2">
                                         <img v-if="chat.user_level" :src="'/level_img/level_' + chat.user_level + '.png'" style="width: 24px; height: 24px; object-fit: contain;">
-                                        <span class="font-medium text-blue-600 text-sm" v-text="chat.nickname || chat.user_id"></span>
+                                        <span class="font-medium text-blue-600 text-sm clickable-user"
+                                              @click="openUserMessagesModal(chat.user_id, chat.nickname || chat.user_id, { session_id: sessionDetail.id, live_id: selectedRoomId })"
+                                              v-text="chat.nickname || chat.user_id"></span>
                                         <span class="text-gray-400 text-xs" v-text="formatDateTime(chat.created_at)"></span>
                                     </div>
                                     <div class="text-gray-700 mt-1 text-sm" v-text="chat.content"></div>
@@ -463,7 +605,9 @@
                                     <div class="flex items-center justify-between">
                                         <div class="flex items-center gap-2">
                                             <img v-if="gift.user_level" :src="'/level_img/level_' + gift.user_level + '.png'" style="width: 24px; height: 24px; object-fit: contain;">
-                                            <span class="font-medium text-blue-600 text-sm" v-text="gift.nickname || gift.user_id"></span>
+                                            <span class="font-medium text-blue-600 text-sm clickable-user"
+                                                  @click="openUserMessagesModal(gift.user_id, gift.nickname || gift.user_id, { session_id: sessionDetail.id, live_id: selectedRoomId })"
+                                                  v-text="gift.nickname || gift.user_id"></span>
                                             <span class="text-gray-400 text-xs" v-text="formatDateTime(gift.created_at)"></span>
                                         </div>
                                         <div class="text-yellow-600 font-bold text-sm" v-text="gift.diamond_count + ' 钻石'"></div>
@@ -536,7 +680,9 @@
                                                 <div v-else class="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-500 text-xs">
                                                     {{ (contributor.nickname || contributor.user_id || '').substring(0, 1) }}
                                                 </div>
-                                                <span class="font-medium text-blue-600 text-sm" v-text="contributor.nickname || contributor.user_id"></span>
+                                                <span class="font-medium text-blue-600 text-sm clickable-user"
+                                                      @click="openUserMessagesModal(contributor.user_id, contributor.nickname || contributor.user_id, { session_id: sessionDetail.id, live_id: selectedRoomId })"
+                                                      v-text="contributor.nickname || contributor.user_id"></span>
                                                 <img v-if="contributor.user_level" :src="'/level_img/level_' + contributor.user_level + '.png'" style="width: 24px; height: 24px; object-fit: contain;">
                                             </div>
                                         </td>
@@ -546,6 +692,141 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endraw %}
+
+        <!-- 用户消息模态框 -->
+        {% raw %}
+        <div v-if="showUserMessagesModal" class="user-modal-overlay" @click.self="closeUserMessagesModal">
+            <div class="user-modal-content">
+                <!-- 用户信息头部 -->
+                <div class="user-header">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex items-center">
+                            <img
+                                v-if="userMessagesData.user.avatar"
+                                :src="userMessagesData.user.avatar"
+                                class="user-avatar-large mr-4">
+                            <div v-else class="user-avatar-large flex items-center justify-center text-2xl font-bold mr-4"
+                                 v-text="(userMessagesData.user.nickname || userMessagesData.user.user_id || 'U').substring(0, 1)"></div>
+                            <div>
+                                <h2 class="text-xl font-bold" v-text="userMessagesData.user.nickname || userMessagesData.user.user_id"></h2>
+                                <div class="text-white text-opacity-80 text-sm">
+                                    <span v-if="userMessagesData.user.level">Lv.</span>
+                                    <span v-text="userMessagesData.user.level"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <button @click="closeUserMessagesModal" class="user-modal-close-btn text-white text-opacity-80 hover:text-opacity-100 text-3xl leading-none">&times;</button>
+                    </div>
+
+                    <!-- 统计数据 -->
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="user-stats-card text-center">
+                            <div class="text-white text-opacity-80 text-xs mb-1">全部消息</div>
+                            <div class="text-xl font-bold" v-text="formatNumber(userMessagesData.stats.total_messages)"></div>
+                        </div>
+                        <div class="user-stats-card text-center">
+                            <div class="text-white text-opacity-80 text-xs mb-1">🎁 累计送礼</div>
+                            <div class="text-xl font-bold" v-text="formatNumber(userMessagesData.stats.total_value)"></div>
+                        </div>
+                        <div class="user-stats-card text-center">
+                            <div class="text-white text-opacity-80 text-xs mb-1">💬 弹幕数</div>
+                            <div class="text-xl font-bold" v-text="formatNumber(userMessagesData.stats.chat_count)"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 标签页 -->
+                <div class="border-b">
+                    <div class="flex">
+                        <button
+                            @click="switchUserMessagesTab('all')"
+                            :class="['user-tab-button flex-1', userMessagesTab === 'all' ? 'active' : '']">
+                            全部消息
+                            <span class="ml-2 px-2 py-0.5 bg-gray-100 rounded-full text-xs"
+                                  v-text="userMessagesData.stats.total_messages"></span>
+                        </button>
+                        <button
+                            @click="switchUserMessagesTab('chat')"
+                            :class="['user-tab-button flex-1', userMessagesTab === 'chat' ? 'active' : '']">
+                            弹幕
+                            <span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full text-xs"
+                                  v-text="userMessagesData.stats.chat_count"></span>
+                        </button>
+                        <button
+                            @click="switchUserMessagesTab('gift')"
+                            :class="['user-tab-button flex-1', userMessagesTab === 'gift' ? 'active' : '']">
+                            礼物
+                            <span class="ml-2 px-2 py-0.5 bg-pink-100 text-pink-600 rounded-full text-xs"
+                                  v-text="userMessagesData.stats.gift_count"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 消息列表 -->
+                <div class="p-4 user-messages-body">
+                    <div v-if="userMessagesLoading" class="user-messages-placeholder">
+                        <div class="text-center text-gray-400">
+                            <svg class="animate-spin w-8 h-8 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p>加载中...</p>
+                        </div>
+                    </div>
+                    <div v-else-if="userMessagesData.messages.length === 0" class="user-messages-placeholder">
+                        <div class="text-center text-gray-400">
+                            <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
+                            </svg>
+                            <p>该用户暂无消息记录</p>
+                        </div>
+                    </div>
+                    <div v-else class="user-messages-list user-messages-fade space-y-2" :key="userMessagesTab">
+                        <div v-for="msg in userMessagesData.messages" :key="msg.id"
+                             :class="['user-message-card', msg.type === 'gift' ? 'user-gift-card' : 'user-chat-card']">
+                            <div class="flex items-center justify-between mb-1">
+                                <div class="flex items-center">
+                                    <img v-if="msg.user_level" :src="'/level_img/level_' + msg.user_level + '.png'"
+                                         class="h-5 mr-2" style="width: 40px; object-fit: contain;">
+                                    <span class="font-medium text-blue-600 text-sm" v-text="msg.nickname || msg.user_id"></span>
+                                </div>
+                                <span class="text-gray-400 text-xs" v-text="formatUserMessageTime(msg.created_at)"></span>
+                            </div>
+                            <div v-if="msg.type === 'chat'" class="text-gray-700 text-sm" v-text="msg.content"></div>
+                            <div v-else class="text-gray-700 text-sm">
+                                送出 <span class="font-semibold text-pink-600" v-text="msg.gift_name"></span>
+                                <span class="text-gray-500" v-text="' x' + msg.gift_count"></span>
+                                <span class="ml-2 text-yellow-600 font-semibold" v-text="msg.diamond_count + ' 钻石'"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 分页 -->
+                <div v-if="userMessagesData.pagination.total_pages > 1" class="px-4 py-3 border-t flex items-center justify-between bg-gray-50">
+                    <div class="text-sm text-gray-500">
+                        第 <span class="font-medium" v-text="userMessagesData.pagination.page"></span> /
+                        <span v-text="userMessagesData.pagination.total_pages"></span> 页
+                        (共 <span class="font-medium" v-text="userMessagesData.pagination.total"></span> 条)
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button
+                            @click="userMessagesGoToPage(userMessagesData.pagination.page - 1)"
+                            :disabled="userMessagesData.pagination.page <= 1"
+                            :class="['px-3 py-1 rounded text-sm', userMessagesData.pagination.page <= 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']">
+                            上一页
+                        </button>
+                        <button
+                            @click="userMessagesGoToPage(userMessagesData.pagination.page + 1)"
+                            :disabled="userMessagesData.pagination.page >= userMessagesData.pagination.total_pages"
+                            :class="['px-3 py-1 rounded text-sm', userMessagesData.pagination.page >= userMessagesData.pagination.total_pages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']">
+                            下一页
+                        </button>
                     </div>
                 </div>
             </div>

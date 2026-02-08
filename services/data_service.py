@@ -1039,3 +1039,211 @@ class DataService:
             return 0
         finally:
             session.close()
+
+    def get_user_messages(self, live_id: str, user_id: str, session_id: int = None,
+                          start_date: str = None, end_date: str = None,
+                          message_type: str = 'all', limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        """
+        获取用户在指定条件下的消息记录
+        :param live_id: 房间ID
+        :param user_id: 用户ID
+        :param session_id: 场次ID（可选，指定场次）
+        :param start_date: 开始日期（可选，格式：YYYY-MM-DD）
+        :param end_date: 结束日期（可选，格式：YYYY-MM-DD）
+        :param message_type: 消息类型 (all/chat/gift)
+        :param limit: 每页数量
+        :param offset: 偏移量
+        :return: {'user': {...}, 'stats': {...}, 'messages': [...], 'pagination': {...}}
+        """
+        session = self.get_session()
+        try:
+            # 构建基础查询条件
+            chat_conditions = [ChatMessage.live_id == live_id, ChatMessage.user_id == user_id]
+            gift_conditions = [GiftMessage.live_id == live_id, GiftMessage.user_id == user_id]
+
+            # 如果指定了场次ID，按场次筛选
+            if session_id:
+                chat_conditions.append(ChatMessage.live_session_id == session_id)
+                gift_conditions.append(GiftMessage.live_session_id == session_id)
+            # 如果指定了日期范围，按日期筛选
+            else:
+                if start_date:
+                    start_datetime = datetime.strptime(start_date, '%Y-%m-%d').replace(
+                        hour=0, minute=0, second=0, microsecond=0,
+                        tzinfo=CHINA_TZ
+                    )
+                    chat_conditions.append(ChatMessage.created_at >= start_datetime)
+                    gift_conditions.append(GiftMessage.created_at >= start_datetime)
+
+                if end_date:
+                    end_datetime = datetime.strptime(end_date, '%Y-%m-%d').replace(
+                        hour=23, minute=59, second=59, microsecond=999999,
+                        tzinfo=CHINA_TZ
+                    )
+                    chat_conditions.append(ChatMessage.created_at <= end_datetime)
+                    gift_conditions.append(GiftMessage.created_at <= end_datetime)
+
+            # 统计用户数据
+            chat_count = session.query(func.count(ChatMessage.id)).filter(
+                and_(*chat_conditions)
+            ).scalar() or 0
+
+            gift_count = session.query(func.count(GiftMessage.id)).filter(
+                and_(*gift_conditions)
+            ).scalar() or 0
+
+            # 计算累计贡献值（礼物总价值）
+            total_value = session.query(func.sum(GiftMessage.total_value)).filter(
+                and_(*gift_conditions)
+            ).scalar() or 0
+
+            # 获取用户最高等级
+            max_chat_level = session.query(func.max(ChatMessage.user_level)).filter(
+                and_(*chat_conditions)
+            ).scalar() or 0
+            max_gift_level = session.query(func.max(GiftMessage.user_level)).filter(
+                and_(*gift_conditions)
+            ).scalar() or 0
+            max_level = max(max_chat_level, max_gift_level)
+
+            # 获取用户昵称（优先从最近的消息获取）
+            latest_chat = session.query(ChatMessage).filter(
+                and_(*chat_conditions)
+            ).order_by(ChatMessage.created_at.desc()).first()
+            latest_gift = session.query(GiftMessage).filter(
+                and_(*gift_conditions)
+            ).order_by(GiftMessage.created_at.desc()).first()
+
+            user_name = user_id  # 默认使用 user_id
+            if latest_chat:
+                user_name = latest_chat.user_name
+            elif latest_gift:
+                user_name = latest_gift.user_name
+
+            # 从 user_contributions 表获取用户头像
+            user_contrib = session.query(UserContribution).filter(
+                and_(
+                    UserContribution.live_id == live_id,
+                    UserContribution.user_id == user_id
+                )
+            ).first()
+            user_avatar = user_contrib.user_avatar if user_contrib else None
+
+            # 构建用户信息
+            user_info = {
+                'user_id': user_id,
+                'nickname': user_name,
+                'avatar': user_avatar,
+                'level': max_level
+            }
+
+            # 构建统计信息
+            stats_info = {
+                'total_messages': chat_count + gift_count,
+                'chat_count': chat_count,
+                'gift_count': gift_count,
+                'total_value': int(total_value)
+            }
+
+            # 获取消息列表
+            messages = []
+            total = 0
+
+            if message_type in ['all', 'chat']:
+                chat_query = session.query(ChatMessage).filter(
+                    and_(*chat_conditions)
+                ).order_by(ChatMessage.created_at.desc())
+
+                if message_type == 'chat':
+                    # 只返回弹幕，需要计算总数
+                    total = chat_count
+                    chat_query = chat_query.offset(offset).limit(limit)
+
+                    for msg in chat_query.all():
+                        messages.append({
+                            'id': msg.id,
+                            'type': 'chat',
+                            'user_id': msg.user_id,
+                            'nickname': msg.user_name,
+                            'user_level': msg.user_level,
+                            'content': msg.content,
+                            'created_at': msg.created_at.isoformat() if msg.created_at else None
+                        })
+                else:
+                    # 返回所有类型，稍后合并排序
+                    for msg in chat_query.all():
+                        messages.append({
+                            'id': msg.id,
+                            'type': 'chat',
+                            'user_id': msg.user_id,
+                            'nickname': msg.user_name,
+                            'user_level': msg.user_level,
+                            'content': msg.content,
+                            'created_at': msg.created_at.isoformat() if msg.created_at else None
+                        })
+
+            if message_type in ['all', 'gift']:
+                gift_query = session.query(GiftMessage).filter(
+                    and_(*gift_conditions)
+                ).order_by(GiftMessage.created_at.desc())
+
+                if message_type == 'gift':
+                    # 只返回礼物
+                    total = gift_count
+                    gift_query = gift_query.offset(offset).limit(limit)
+
+                    for msg in gift_query.all():
+                        messages.append({
+                            'id': msg.id,
+                            'type': 'gift',
+                            'user_id': msg.user_id,
+                            'nickname': msg.user_name,
+                            'user_level': msg.user_level,
+                            'gift_name': msg.gift_name,
+                            'gift_count': msg.gift_count,
+                            'diamond_count': msg.total_value,
+                            'created_at': msg.created_at.isoformat() if msg.created_at else None
+                        })
+                else:
+                    # 返回所有类型
+                    for msg in gift_query.all():
+                        messages.append({
+                            'id': msg.id,
+                            'type': 'gift',
+                            'user_id': msg.user_id,
+                            'nickname': msg.user_name,
+                            'user_level': msg.user_level,
+                            'gift_name': msg.gift_name,
+                            'gift_count': msg.gift_count,
+                            'diamond_count': msg.total_value,
+                            'created_at': msg.created_at.isoformat() if msg.created_at else None
+                        })
+
+            # 如果是 all 类型，需要合并排序后分页
+            if message_type == 'all':
+                total = chat_count + gift_count
+                # 按时间排序
+                messages.sort(key=lambda x: x['created_at'], reverse=True)
+                # 分页
+                messages = messages[offset:offset + limit]
+
+            # 计算分页信息
+            page_size = limit
+            page = (offset // page_size) + 1 if page_size > 0 else 1
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+            pagination = {
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            }
+
+            return {
+                'user': user_info,
+                'stats': stats_info,
+                'messages': messages,
+                'pagination': pagination
+            }
+        finally:
+            session.close()
