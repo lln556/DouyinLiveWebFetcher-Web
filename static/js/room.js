@@ -8,9 +8,12 @@ const app = new Vue({
         live_id: null,  // 用于模板显示
         room: null,
         loading: true,
-        loadingMessages: true,  // 加载消息时的loading状态
+        loadingMessages: false,  // 加载消息时的loading状态（已废弃）
         activeTab: 'all', // all/chat/gift
         messages: [],
+        lastSession: null,  // 上次直播场次
+        sessions: [],  // 历史场次列表
+        showSessionsModal: false,  // 是否显示历史场次弹窗
         stats: {
             currentUserCount: 0,
             totalUserCount: 0,
@@ -21,7 +24,6 @@ const app = new Vue({
         currentSession: null,
         contributors: [],
         socket: null,
-        initialMessageCount: 0,  // 记录初始加载的消息数量
         isAtBottom: true,  // 用户是否在底部
         unreadCount: 0,  // 未读消息数量
         isUserScrolling: false,  // 用户是否正在手动滚动
@@ -73,7 +75,7 @@ const app = new Vue({
         // 并行加载数据
         this.loadRoomInfo();
         this.loadCurrentSession();
-        this.loadSessionMessages();  // 加载当前场次消息
+        // 不再加载历史消息，只显示新推送的
         this.loadSessionContributors();
         this.initSocket();
 
@@ -119,6 +121,9 @@ const app = new Vue({
                     const anchorName = data.room.anchor_name || this.liveId;
                     document.title = `${anchorName} - 直播详情`;
                 }
+
+                // 加载历史场次数据（用于未开播时显示）
+                await this.loadHistorySessions();
             } catch (error) {
                 console.error('加载房间信息失败:', error);
             } finally {
@@ -129,102 +134,41 @@ const app = new Vue({
             try {
                 const response = await fetch(`/api/rooms/${this.liveId}/current-session`);
                 const data = await response.json();
-                if (data.session) {
+                if (data.session && data.session.status === 'live') {
+                    // 只有正在直播的场次才显示为"当场直播"
                     this.currentSession = data.session;
+                } else {
+                    // 直播已结束或没有场次，设置为 null
+                    this.currentSession = null;
                 }
             } catch (error) {
                 console.error('加载当前直播场次失败:', error);
             }
         },
-        async loadSessionMessages() {
-            this.loadingMessages = true;
+        async loadHistorySessions() {
             try {
-                // 获取当前直播场次
-                const sessionResponse = await fetch(`/api/rooms/${this.liveId}/current-session`);
-                const sessionData = await sessionResponse.json();
+                const response = await fetch(`/api/rooms/${this.liveId}/sessions?limit=10`);
+                const data = await response.json();
 
-                if (!sessionData.session) {
-                    console.log('暂无直播场次数据');
-                    this.loadingMessages = false;
-                    return;
-                }
+                if (data.sessions) {
+                    this.sessions = data.sessions;
 
-                const sessionId = sessionData.session.id;
-                console.log('加载当前场次消息:', sessionId);
-
-                // 获取当前场次的所有消息（无限制）
-                const batchSize = 500;
-                let offset = 0;
-                let hasMore = true;
-                let allMessages = [];
-
-                // 并行加载弹幕和礼物
-                const [chatResponse, giftResponse] = await Promise.all([
-                    fetch(`/api/rooms/sessions/${sessionId}?type=chat&limit=10000`),
-                    fetch(`/api/rooms/sessions/${sessionId}?type=gift&limit=10000`)
-                ]);
-
-                const [chatData, giftData] = await Promise.all([
-                    chatResponse.json(),
-                    giftResponse.json()
-                ]);
-
-                // 合并弹幕消息
-                if (chatData.chats) {
-                    allMessages.push(...chatData.chats.map(msg => {
-                        const levelImg = msg.user_level ? `<img src="/level_img/level_${msg.user_level}.png" class="user-level-icon" alt="等级">` : '';
-                        const fansClubTag = msg.fans_club_level > 0 ? `<img src="/fansclub_img/fansclub_${msg.fans_club_level}.png" class="fans-club-icon" alt="粉丝团">` : '';
-                        const userName = msg.nickname || msg.user_id;
-                        const content = `${levelImg}${fansClubTag} <span class="user-highlight" data-user-id="${msg.user_id}" data-user-name="${userName}">${userName}</span>: ${msg.content}`;
-                        return {
-                            type: 'chat',
-                            content: content,
-                            user_id: msg.user_id,
-                            user: msg.nickname,
-                            is_gift_user: false,
-                            timestamp: new Date(msg.created_at)
-                        };
-                    }));
-                }
-
-                // 合并礼物消息
-                if (giftData.gifts) {
-                    allMessages.push(...giftData.gifts.map(msg => {
-                        const levelImg = msg.user_level ? `<img src="/level_img/level_${msg.user_level}.png" class="user-level-icon" alt="等级">` : '';
-                        const fansClubTag = msg.fans_club_level > 0 ? `<img src="/fansclub_img/fansclub_${msg.fans_club_level}.png" class="fans-club-icon" alt="粉丝团">` : '';
-                        const userName = msg.nickname || msg.user_id;
-                        const content = `${levelImg}${fansClubTag} <span class="user-highlight" data-user-id="${msg.user_id}" data-user-name="${userName}">${userName}</span> 赠送了 ${msg.gift_count} 个 ${msg.gift_name} (价值${msg.diamond_count}钻石)`;
-                        return {
-                            type: 'gift',
-                            content: content,
-                            user_id: msg.user_id,
-                            user: msg.nickname,
-                            is_gift_user: true,
-                            timestamp: new Date(msg.created_at)
-                        };
-                    }));
-                }
-
-                // 按时间排序
-                allMessages.sort((a, b) => a.timestamp - b.timestamp);
-
-                this.messages = allMessages;
-                this.initialMessageCount = allMessages.length;
-                console.log(`已加载 ${allMessages.length} 条消息`);
-
-                // 滚动到底部显示最新消息
-                this.$nextTick(() => {
-                    const container = document.querySelector('.messages-container');
-                    if (container) {
-                        container.scrollTop = container.scrollHeight;
-                        this.isAtBottom = true;
-                        this.unreadCount = 0;
+                    if (data.sessions.length === 0) {
+                        return;
                     }
-                });
+
+                    // 找出最近已结束的场次作为"上次直播"
+                    const endedSessions = data.sessions.filter(s => s.status === 'ended');
+
+                    if (endedSessions.length > 0) {
+                        this.lastSession = endedSessions[0];
+                    } else {
+                        // 如果没有已结束的场次，使用最近的场次（可能是正在进行中的）
+                        this.lastSession = data.sessions[0];
+                    }
+                }
             } catch (error) {
-                console.error('加载场次消息失败:', error);
-            } finally {
-                this.loadingMessages = false;
+                console.error('加载历史场次失败:', error);
             }
         },
         async startMonitoring() {
@@ -331,9 +275,12 @@ const app = new Vue({
                     contributorInfo: data.contributor_info || []
                 };
 
-                // 实时更新当前场次数据
-                if (data.current_session) {
+                // 实时更新当前场次数据 - 只有正在直播的才显示
+                if (data.current_session && data.current_session.status === 'live') {
                     this.currentSession = data.current_session;
+                } else if (!data.current_session || data.current_session.status !== 'live') {
+                    // 直播结束或没有场次，清空当场直播显示
+                    this.currentSession = null;
                 }
             });
         },
@@ -585,6 +532,19 @@ const app = new Vue({
         formatAgeRange(val) {
             const map = {0: '-', 1: '<18', 2: '18-23', 3: '24-30', 4: '31-40', 5: '41-50', 6: '>50'};
             return map[val] || '-';
+        },
+        // 历史场次相关方法
+        openSessionsModal() {
+            this.showSessionsModal = true;
+        },
+        closeSessionsModal() {
+            this.showSessionsModal = false;
+        },
+        getSessionEndTime(session) {
+            if (session.end_time) {
+                return this.formatDateTime(session.end_time);
+            }
+            return '进行中';
         }
     }
 });
