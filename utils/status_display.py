@@ -221,10 +221,10 @@ class StatusDisplay:
 
         # 表头
         sys.stderr.write(
-            f"{'主播':<20s} | {'live_id':<15s} | {'监控状态':<8s} | {'直播':<6s} | "
-            f"{'在线人数':<8s} | {'收入':<10s} | {'备注'}\n"
+            f"{'主播':^20s} | {'live_id':^15s} | {'监控状态':^8s} | {'直播':^6s} | "
+            f"{'在线人数':^8s} | {'收入':^10s} | {'备注':^30s}\n"
         )
-        sys.stderr.write("-" * 110 + "\n")
+        sys.stderr.write("-" * 115 + "\n")
 
         # 数据行
         for row in display_rows:
@@ -245,15 +245,15 @@ class StatusDisplay:
                 income_str = "-"
 
             note = row.get('note', '')
-            anchor = (row.get('anchor_name', '未知')[:20] + "..") if len(row.get('anchor_name', '')) > 20 else row.get('anchor_name', '未知')[:20]
+            anchor = row.get('anchor_name', '未知')[:18]
             live_id = row.get('live_id', '')[:15]
 
             sys.stderr.write(
-                f"{anchor:<20s} | {live_id:<15s} | {status_label:<8s} | "
-                f"{live_label:<6s} | {viewer_str:>8s} | {income_str:>10s} | {note}\n"
+                f"{anchor:^20s} | {live_id:^15s} | {status_label:^8s} | "
+                f"{live_label:^6s} | {viewer_str:^8s} | {income_str:^10s} | {note:^30s}\n"
             )
 
-        sys.stderr.write("=" * 110 + "\n")
+        sys.stderr.write("=" * 115 + "\n")
         sys.stderr.flush()
 
     def _run(self):
