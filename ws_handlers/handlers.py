@@ -737,8 +737,9 @@ class WebDouyinLiveFetcher:
         """WebSocket连接建立"""
         self.log.success("WebSocket连接已建立")
 
-        # 重置未开播检测计数器（连接成功说明开播了）
+        # 重置计数器（连接成功说明开播了）
         self.monitored_room.reset_offline_counter()
+        self.monitored_room.reconnect_count = 0
 
         # 获取并更新主播信息
         try:

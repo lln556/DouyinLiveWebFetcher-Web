@@ -64,6 +64,7 @@ class MonitoredRoom:
             return
 
         self.shutdown_event.clear()
+        self.reconnect_count = 0
         self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.thread.start()
         logger.info(f"启动房间 {self.live_id} 的监控线程")
@@ -128,145 +129,180 @@ class MonitoredRoom:
         """监控循环（支持自动重连）"""
         from ws_handlers.handlers import WebDouyinLiveFetcher
 
-        while not self.shutdown_event.is_set():
-            try:
-                # 创建新的fetcher实例
-                self.fetcher = WebDouyinLiveFetcher(
-                    self.live_id,
-                    self.manager.data_service,
-                    self.socketio,
-                    self
-                )
+        try:
+            while not self.shutdown_event.is_set():
+                try:
+                    # 创建新的fetcher实例
+                    self.fetcher = WebDouyinLiveFetcher(
+                        self.live_id,
+                        self.manager.data_service,
+                        self.socketio,
+                        self
+                    )
 
-                # 记录连接时间
-                self.last_connect_time = get_china_now()
-                self.manager.data_service.update_live_room(
-                    self.live_id,
-                    last_connect_time=self.last_connect_time
-                )
+                    # 记录连接时间
+                    self.last_connect_time = get_china_now()
+                    self.manager.data_service.update_live_room(
+                        self.live_id,
+                        last_connect_time=self.last_connect_time
+                    )
 
-                # 获取房间状态，只有在直播时才继续连接
-                is_live = self.fetcher.get_room_status()
+                    # 获取房间状态，只有在直播时才继续连接
+                    is_live = self.fetcher.get_room_status()
 
-                if not is_live:
-                    logger.warning(f"房间 {self.live_id} 当前未开播")
-                    # 检查是否应该结束直播场次（连续多次未开播）
-                    self.check_and_end_session_if_offline("检测到主播未开播")
+                    # 在耗时操作后再次检查停止信号，防止覆盖 stop() 写入的状态
+                    if self.shutdown_event.is_set():
+                        break
 
-                    # 更新状态为等待
+                    if not is_live:
+                        logger.warning(f"房间 {self.live_id} 当前未开播")
+                        # 检查是否应该结束直播场次（连续多次未开播）
+                        self.check_and_end_session_if_offline("检测到主播未开播")
+
+                        # 更新状态为等待
+                        self.manager.data_service.update_live_room_status(
+                            self.live_id,
+                            'offline',
+                            '主播未开播，等待开播中...'
+                        )
+                        self.manager.data_service.log_system_event(
+                            self.live_id,
+                            'not_live',
+                            '检测到主播未开播，进入轮询模式',
+                            anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
+                        )
+
+                        # 进入轮询模式，等待主播开播
+                        logger.info(f"房间 {self.live_id} 进入轮询模式，等待主播开播")
+                        if self._poll_room_status():
+                            # 检测到开播，重置重连次数并继续
+                            self.reconnect_count = 0
+                            self.manager.data_service.update_live_room_reconnect(self.live_id, 0)
+                            continue
+                        else:
+                            # 被手动停止
+                            logger.info(f"房间 {self.live_id} 轮询被手动停止，退出监控")
+                            break
+                    else:
+                        # 更新状态为监控中
+                        self.manager.data_service.update_live_room_status(
+                            self.live_id,
+                            'monitoring'
+                        )
+                        self.manager.data_service.log_system_event(
+                            self.live_id,
+                            'connect',
+                            f'开始监控直播间 {self.live_id}',
+                            anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
+                        )
+
+                        # 启动WebSocket连接（阻塞直到断开）
+                        self.fetcher.start()
+
+                except Exception as e:
+                    # 如果是停止信号导致的异常，直接退出
+                    if self.shutdown_event.is_set():
+                        break
+
+                    logger.error(f"房间 {self.live_id} 监控出错: {e}")
+
+                    # 记录错误
                     self.manager.data_service.update_live_room_status(
                         self.live_id,
-                        'offline',
-                        '主播未开播，等待开播中...'
+                        'error',
+                        str(e)
                     )
                     self.manager.data_service.log_system_event(
                         self.live_id,
-                        'not_live',
-                        '检测到主播未开播，进入轮询模式',
+                        'error',
+                        f'监控出错: {str(e)}',
+                        {'error': str(e)},
                         anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
                     )
 
-                    # 进入轮询模式，等待主播开播
-                    logger.info(f"房间 {self.live_id} 进入轮询模式，等待主播开播")
+                # 检查是否应该重连（仅在已连接的情况下）
+                if self.shutdown_event.is_set():
+                    logger.info(f"房间 {self.live_id} 收到停止信号，退出监控循环")
+                    break
+
+                try:
+                    # 只有在之前成功连接过的情况下才考虑重连
+                    # （避免在未开播时无限重试）
+                    if self.should_reconnect() and self.last_connect_time:
+                        self.reconnect_count += 1
+                        self.manager.data_service.update_live_room_reconnect(
+                            self.live_id,
+                            self.reconnect_count
+                        )
+                        self.manager.data_service.log_system_event(
+                            self.live_id,
+                            'reconnect',
+                            f'准备第 {self.reconnect_count} 次重连',
+                            anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
+                        )
+                        logger.info(f"房间 {self.live_id} 准备第 {self.reconnect_count} 次重连")
+                        time.sleep(config.MONITOR_RECONNECT_DELAY)
+                    else:
+                        # 检查是否应该进入轮询模式（仅当开启自动重连时）
+                        room = self.manager.data_service.get_live_room(self.live_id)
+                        if room and room.auto_reconnect:
+                            logger.info(f"房间 {self.live_id} 达到最大重连次数，进入等待开播状态")
+                            self.manager.data_service.update_live_room_status(
+                                self.live_id,
+                                'waiting',
+                                '等待主播开播'
+                            )
+                            self.manager.data_service.log_system_event(
+                                self.live_id,
+                                'waiting',
+                                '达到最大重连次数，开始轮询直播状态',
+                                anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
+                            )
+                            # 进入轮询模式
+                            if self._poll_room_status():
+                                # 检测到开播，重置重连次数并继续循环
+                                self.reconnect_count = 0
+                                self.manager.data_service.update_live_room_reconnect(self.live_id, 0)
+                                logger.info(f"房间 {self.live_id} 检测到开播，准备重新连接")
+                                continue
+                            else:
+                                # 轮询被中断（shutdown_event被设置）
+                                break
+                        else:
+                            logger.info(f"房间 {self.live_id} 达到最大重连次数且未开启自动重连，退出监控循环")
+                            # 结束当前直播场次（如果存在）
+                            self.end_current_session(reason="达到最大重连次数且未开启自动重连")
+                            self.manager.data_service.update_live_room_status(
+                                self.live_id,
+                                'stopped',
+                                '达到最大重连次数'
+                            )
+                            break
+                except Exception as e:
+                    logger.error(f"房间 {self.live_id} 重连逻辑出错: {e}")
+                    # 重连逻辑异常时直接进入轮询模式，避免线程退出
+                    try:
+                        self.manager.data_service.update_live_room_status(
+                            self.live_id,
+                            'waiting',
+                            f'重连出错，进入轮询: {str(e)}'
+                        )
+                    except Exception:
+                        pass
                     if self._poll_room_status():
-                        # 检测到开播，重置重连次数并继续
                         self.reconnect_count = 0
-                        self.manager.data_service.update_live_room_reconnect(self.live_id, 0)
                         continue
                     else:
-                        # 被手动停止
-                        logger.info(f"房间 {self.live_id} 轮询被手动停止，退出监控")
                         break
-                else:
-                    # 更新状态为监控中
-                    self.manager.data_service.update_live_room_status(
-                        self.live_id,
-                        'monitoring'
-                    )
-                    self.manager.data_service.log_system_event(
-                        self.live_id,
-                        'connect',
-                        f'开始监控直播间 {self.live_id}',
-                        anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
-                    )
-
-                    # 启动WebSocket连接（阻塞直到断开）
-                    self.fetcher.start()
-
-            except Exception as e:
-                logger.error(f"房间 {self.live_id} 监控出错: {e}")
-
-                # 记录错误
+        finally:
+            # 线程退出时确保状态正确，防止竞争条件导致状态残留
+            if self.shutdown_event.is_set():
                 self.manager.data_service.update_live_room_status(
                     self.live_id,
-                    'error',
-                    str(e)
+                    'stopped',
+                    '监控已停止'
                 )
-                self.manager.data_service.log_system_event(
-                    self.live_id,
-                    'error',
-                    f'监控出错: {str(e)}',
-                    {'error': str(e)},
-                    anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
-                )
-
-            # 检查是否应该重连（仅在已连接的情况下）
-            if self.shutdown_event.is_set():
-                logger.info(f"房间 {self.live_id} 收到停止信号，退出监控循环")
-                break
-
-            # 只有在之前成功连接过的情况下才考虑重连
-            # （避免在未开播时无限重试）
-            if self.should_reconnect() and self.last_connect_time:
-                self.reconnect_count += 1
-                self.manager.data_service.update_live_room_reconnect(
-                    self.live_id,
-                    self.reconnect_count
-                )
-                self.manager.data_service.log_system_event(
-                    self.live_id,
-                    'reconnect',
-                    f'准备第 {self.reconnect_count} 次重连',
-                    anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
-                )
-                logger.info(f"房间 {self.live_id} 准备第 {self.reconnect_count} 次重连")
-                time.sleep(config.MONITOR_RECONNECT_DELAY)
-            else:
-                # 检查是否应该进入轮询模式（仅当开启自动重连时）
-                room = self.manager.data_service.get_live_room(self.live_id)
-                if room and room.auto_reconnect:
-                    logger.info(f"房间 {self.live_id} 达到最大重连次数，进入等待开播状态")
-                    self.manager.data_service.update_live_room_status(
-                        self.live_id,
-                        'waiting',
-                        '等待主播开播'
-                    )
-                    self.manager.data_service.log_system_event(
-                        self.live_id,
-                        'waiting',
-                        '达到最大重连次数，开始轮询直播状态',
-                        anchor_name=self.anchor_name if hasattr(self, 'anchor_name') else None
-                    )
-                    # 进入轮询模式
-                    if self._poll_room_status():
-                        # 检测到开播，重置重连次数并继续循环
-                        self.reconnect_count = 0
-                        self.manager.data_service.update_live_room_reconnect(self.live_id, 0)
-                        logger.info(f"房间 {self.live_id} 检测到开播，准备重新连接")
-                        continue
-                    else:
-                        # 轮询被中断（shutdown_event被设置）
-                        break
-                else:
-                    logger.info(f"房间 {self.live_id} 达到最大重连次数且未开启自动重连，退出监控循环")
-                    # 结束当前直播场次（如果存在）
-                    self.end_current_session(reason="达到最大重连次数且未开启自动重连")
-                    self.manager.data_service.update_live_room_status(
-                        self.live_id,
-                        'stopped',
-                        '达到最大重连次数'
-                    )
-                    break
+            logger.info(f"房间 {self.live_id} 监控线程已退出")
 
     def _poll_room_status(self) -> bool:
         """
@@ -688,6 +724,7 @@ class RoomManager:
                 return False
 
             monitored_room.stop()
+            del self.active_rooms[live_id]
             return True
 
     def restart_failed_rooms(self) -> int:
