@@ -1,9 +1,14 @@
 """
 终端状态面板
 使用 rich.Live + rich.Table 动态刷新显示所有房间状态
+
+Docker 环境下自动禁用 rich 面板，改用定期文本输出
 """
+import os
+import sys
 import threading
 from datetime import datetime
+from pathlib import Path
 
 from rich.console import Console
 from rich.live import Live
@@ -12,9 +17,34 @@ from rich.text import Text
 
 from models.database import CHINA_TZ
 
-# 共享 Console 实例，loguru 的控制台输出也通过此实例路由
-# 当 Live 处于活跃状态时，console.print() 的输出会自动渲染在面板上方
-console = Console(stderr=True)
+
+def _is_docker() -> bool:
+    """检测是否在 Docker 容器中运行"""
+    # 方法1: 检查 /.dockerenv 文件
+    if Path("/.dockerenv").exists():
+        return True
+    # 方法2: 检查 /proc/1/cgroup 是否包含 docker
+    try:
+        cgroup = Path("/proc/1/cgroup").read_text()
+        if "docker" in cgroup or "/lxc/" in cgroup:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+# 检测环境
+_IS_DOCKER = _is_docker()
+
+# Docker 环境下禁用 rich，使用文本模式
+if _IS_DOCKER:
+    # Docker 环境不使用 rich Console，日志直接输出到 stderr
+    console = None
+    _RICH_MODE = False
+else:
+    # 非 Docker 环境，使用 rich
+    console = Console(stderr=True)
+    _RICH_MODE = True
 
 # 状态颜色映射
 STATUS_STYLES = {
@@ -45,7 +75,7 @@ LIVE_STATUS_LABELS = {
 
 
 class StatusDisplay:
-    """终端状态面板，使用 rich.Live 动态刷新房间状态表"""
+    """终端状态面板，Docker 环境使用文本模式，本地环境使用 rich.Live"""
 
     def __init__(self, room_manager, refresh_interval: float = 5.0):
         """
@@ -57,6 +87,10 @@ class StatusDisplay:
         self._thread = None
         self._stop_event = threading.Event()
         self._live = None
+        self._rich_mode = _RICH_MODE
+
+        if _IS_DOCKER:
+            sys.stderr.write("[StatusDisplay] Docker 环境检测，使用文本模式输出状态\n")
 
     def _build_table(self) -> Table:
         """构建状态表格"""
@@ -160,32 +194,73 @@ class StatusDisplay:
 
         return rows
 
+    def _print_text_status(self):
+        """文本模式：简单打印状态列表（Docker 环境使用）"""
+        display_rows = self._get_display_data()
+        if not display_rows:
+            return
+
+        now = datetime.now(CHINA_TZ).strftime('%Y-%m-%d %H:%M:%S')
+        sys.stderr.write(f"\n[{now}] 直播监控状态:\n")
+        sys.stderr.write("-" * 90 + "\n")
+
+        for row in display_rows:
+            status = row.get('status', 'stopped')
+            status_label = STATUS_LABELS.get(status, status)
+            live_label = LIVE_STATUS_LABELS.get(status, '未知')
+
+            viewer_count = row.get('current_user_count', 0)
+            viewer_str = f"{viewer_count:,}" if status == 'monitoring' and viewer_count > 0 else "-"
+
+            total_income = row.get('total_income', 0)
+            income_str = f"{total_income:,.0f}" if total_income > 0 else "-"
+
+            note = row.get('note', '')
+
+            anchor = row.get('anchor_name', '未知')[:20]
+            live_id = row.get('live_id', '')[:15]
+
+            sys.stderr.write(
+                f"{anchor:20s} | {live_id:15s} | {status_label:6s} | "
+                f"{live_label:6s} | {viewer_str:>8s} | {income_str:>10s} | {note}\n"
+            )
+
+        sys.stderr.write("-" * 90 + "\n")
+
     def _run(self):
-        """后台线程：使用 rich.Live 刷新状态表"""
-        try:
-            with Live(
-                self._build_table(),
-                console=console,
-                refresh_per_second=0.5,
-                transient=False,
-            ) as live:
-                self._live = live
-                while not self._stop_event.is_set():
-                    live.update(self._build_table())
-                    self._stop_event.wait(self.refresh_interval)
+        """后台线程：刷新状态显示"""
+        if self._rich_mode:
+            # Rich 模式：使用 rich.Live 动态刷新
+            try:
+                with Live(
+                    self._build_table(),
+                    console=console,
+                    refresh_per_second=0.5,
+                    transient=False,
+                ) as live:
+                    self._live = live
+                    while not self._stop_event.is_set():
+                        live.update(self._build_table())
+                        self._stop_event.wait(self.refresh_interval)
+                    self._live = None
+            except Exception:
                 self._live = None
-        except Exception:
-            self._live = None
+        else:
+            # 文本模式：定期打印状态（Docker 环境）
+            while not self._stop_event.is_set():
+                self._print_text_status()
+                self._stop_event.wait(self.refresh_interval)
 
     def start(self):
         """启动状态面板"""
         if self._thread and self._thread.is_alive():
             return
 
-        # 将共享 Console 注册到日志模块，
-        # 使 WARNING/ERROR 日志通过 console.print() 输出（渲染在面板上方）
-        from utils.logger import set_console
-        set_console(console)
+        # 只在 rich 模式下注册 Console 到日志模块
+        # 文本模式（Docker）下日志直接输出到 stderr，不需要通过 rich
+        if self._rich_mode and console:
+            from utils.logger import set_console
+            set_console(console)
 
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True, name="status-display")
