@@ -155,15 +155,21 @@ class MonitoredRoom:
                         break
 
                     if not is_live:
-                        logger.warning(f"房间 {self.live_id} 当前未开播")
+                        logger.info(f"房间 {self.live_id} 当前未开播")
                         # 检查是否应该结束直播场次（连续多次未开播）
                         self.check_and_end_session_if_offline("检测到主播未开播")
+
+                        # 根据返回值区分：None=请求失败（疑似风控），False=确认未开播
+                        if is_live is None:
+                            error_msg = '疑似被风控，等待重试...'
+                        else:
+                            error_msg = '主播未开播，等待开播中...'
 
                         # 更新状态为等待
                         self.manager.data_service.update_live_room_status(
                             self.live_id,
                             'offline',
-                            '主播未开播，等待开播中...'
+                            error_msg
                         )
                         self.manager.data_service.log_system_event(
                             self.live_id,
@@ -324,6 +330,11 @@ class MonitoredRoom:
                 # get_room_status 返回 True 表示正在直播
                 if is_live:
                     logger.info(f"房间 {self.live_id} 检测到正在直播，准备连接")
+                    self.manager.data_service.update_live_room_status(
+                        self.live_id,
+                        'offline',
+                        '检测到开播，准备连接...'
+                    )
                     self.manager.data_service.log_system_event(
                         self.live_id,
                         'detected',
@@ -333,6 +344,16 @@ class MonitoredRoom:
                     return True
                 else:
                     poll_count += 1
+                    # 区分：None=请求失败（疑似风控），False=确认未开播
+                    if is_live is None:
+                        error_msg = '疑似被风控，等待重试...'
+                    else:
+                        error_msg = '主播未开播，等待开播中...'
+                    self.manager.data_service.update_live_room_status(
+                        self.live_id,
+                        'offline',
+                        error_msg
+                    )
                     logger.info(f"房间 {self.live_id} 未开播，继续等待... (第{poll_count}次检测)")
 
             except Exception as e:
@@ -447,7 +468,7 @@ class MonitoredRoom:
         logger.info(f"[{self.live_id}] 检测到未开播，计数器: {self.offline_check_count}/{OFFLINE_THRESHOLD}，原因={reason}")
 
         if self.offline_check_count >= OFFLINE_THRESHOLD:
-            logger.warning(f"[{self.live_id}] 连续{OFFLINE_THRESHOLD}次检测到未开播，结束直播场次")
+            logger.info(f"[{self.live_id}] 连续{OFFLINE_THRESHOLD}次检测到未开播，结束直播场次")
             return self.end_current_session(reason=f"连续{OFFLINE_THRESHOLD}次未开播: {reason}")
         return False
 
@@ -466,7 +487,7 @@ class MonitoredRoom:
                 'fans_club_level': fans_club_level or 0,
                 'user_level': user_level or 0
             }
-            logger.info(f"[新贡献用户] {user_id}={user_name}, avatar={user_avatar}, gift_value={gift_value}")
+            logger.debug(f"[新贡献用户] {user_id}={user_name}, avatar={user_avatar}, gift_value={gift_value}")
         else:
             old_name = self.user_contributions[user_id]['user_name']
             old_avatar = self.user_contributions[user_id].get('avatar')
@@ -479,11 +500,11 @@ class MonitoredRoom:
             if user_level and user_level > 0:
                 self.user_contributions[user_id]['user_level'] = user_level
             if old_name != user_name or old_avatar != user_avatar:
-                logger.info(f"[更新用户信息] {user_id}: {old_name} -> {user_name}, avatar: {old_avatar} -> {user_avatar}")
+                logger.debug(f"[更新用户信息] {user_id}: {old_name} -> {user_name}, avatar: {old_avatar} -> {user_avatar}")
 
         self.user_contributions[user_id]['score'] += gift_value
         self.user_contributions[user_id]['gift_count'] = self.user_contributions[user_id].get('gift_count', 0) + gift_count
-        logger.info(f"[更新贡献] {user_id}={user_name}, score={self.user_contributions[user_id]['score']}, gift_count={self.user_contributions[user_id]['gift_count']}")
+        logger.debug(f"[更新贡献] {user_id}={user_name}, score={self.user_contributions[user_id]['score']}, gift_count={self.user_contributions[user_id]['gift_count']}")
 
         # 同步到数据库
         self.manager.data_service.update_user_contribution(
@@ -526,7 +547,7 @@ class MonitoredRoom:
         # 记录贡献榜数据用于调试
         if rank_list:
             top_5 = [{'rank': r['rank'], 'user_id': r['user_id'], 'user': r['user'], 'score': r['score']} for r in rank_list[:5]]
-            logger.info(f"[贡献榜TOP5] {top_5}")
+            logger.debug(f"[贡献榜TOP5] {top_5}")
 
         return rank_list
 
@@ -783,3 +804,30 @@ class RoomManager:
 
             self.active_rooms.clear()
             logger.info("所有监控房间已关闭")
+
+    def get_display_status(self) -> list:
+        """
+        获取所有房间的状态摘要（供终端状态面板调用）
+        :return: 房间状态列表
+        """
+        rows = []
+        try:
+            all_rooms = self.data_service.list_live_rooms()
+            for room in all_rooms:
+                live_id = room.live_id
+                row = {
+                    'anchor_name': room.anchor_name or live_id,
+                    'live_id': live_id,
+                    'status': room.status or 'stopped',
+                    'current_user_count': 0,
+                    'total_income': 0,
+                    'error_message': room.error_message if hasattr(room, 'error_message') else '',
+                }
+                monitored = self.active_rooms.get(live_id)
+                if monitored:
+                    row['current_user_count'] = monitored.stats.get('current_user_count', 0)
+                    row['total_income'] = monitored.stats.get('total_income', 0)
+                rows.append(row)
+        except Exception as e:
+            logger.error(f"获取显示状态失败: {e}")
+        return rows

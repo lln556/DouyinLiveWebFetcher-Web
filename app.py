@@ -16,6 +16,7 @@ from services.room_manager import RoomManager, MonitoredRoom
 from services.scheduler_service import SchedulerService
 from api.rooms import init_rooms_api
 from utils.logger import get_logger
+from utils.status_display import StatusDisplay
 
 # 使用 loguru 全局日志
 logger = get_logger("app")
@@ -65,6 +66,9 @@ room_manager = RoomManager(data_service, socketio)
 
 # 初始化调度服务
 scheduler_service = SchedulerService(room_manager, data_service)
+
+# 初始化终端状态面板
+status_display = StatusDisplay(room_manager)
 
 
 # ==================== 路由定义 ====================
@@ -231,6 +235,7 @@ def initialize():
 def handle_shutdown():
     """关闭应用"""
     logger.info("正在关闭应用...")
+    status_display.stop()
     room_manager.shutdown()
     scheduler_service.stop()
     data_service.close_session()
@@ -240,6 +245,9 @@ if __name__ == '__main__':
     try:
         # 启动调度服务
         scheduler_service.start()
+
+        # 启动终端状态面板
+        status_display.start()
 
         logger.info("抖音直播监控平台启动中...")
         logger.info(f"数据库: {config.DATABASE_URL}")
@@ -254,8 +262,10 @@ if __name__ == '__main__':
         )
     except KeyboardInterrupt:
         logger.info("收到中断信号，正在关闭...")
+        status_display.stop()
         room_manager.shutdown()
         scheduler_service.stop()
         data_service.close_session()
     finally:
+        status_display.stop()
         logger.info("应用已关闭")

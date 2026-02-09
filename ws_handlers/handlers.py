@@ -257,7 +257,7 @@ class WebDouyinLiveFetcher:
             'age_range': age_range,
         }
         self.socketio.emit(f'room_{self.live_id}', message_data, room=f'room_{self.live_id}')
-        self.log.info(f"发送弹幕消息: {user}: {content}")
+        self.log.debug(f"发送弹幕消息: {user}: {content}")
 
     def _handle_gift_message(self, gift_msg):
         """处理礼物消息
@@ -323,7 +323,7 @@ class WebDouyinLiveFetcher:
             if len(self.traceId_list) > 1000:
                 self.traceId_list = self.traceId_list[-500:]
 
-        self.log.info(f"[礼物消息] user_id={user_id}, user_name={user}, gift_name={gift_name}, price={gift_price}, send_type={gift_msg.send_type}, group_id={group_id_str}, trace_id={trace_id}")
+        self.log.debug(f"[礼物消息] user_id={user_id}, user_name={user}, gift_name={gift_name}, price={gift_price}, send_type={gift_msg.send_type}, group_id={group_id_str}, trace_id={trace_id}")
 
         # ========== 第二步：使用 group_id 组合连击礼物 ==========
         # 有 group_id 的礼物都可能是连击礼物（不依赖 send_type）
@@ -384,14 +384,14 @@ class WebDouyinLiveFetcher:
                     )
                     if msg:
                         self.monitored_room.combo_gifts[combo_key]['db_id'] = msg.id
-                    self.log.info(f"连击礼物首次保存: {user} {gift_name}x{gift_count}, db_id={msg.id if msg else None}")
+                    self.log.debug(f"连击礼物首次保存: {user} {gift_name}x{gift_count}, db_id={msg.id if msg else None}")
                 else:
                     data_service.update_gift_message(
                         db_id,
                         gift_count=gift_count,
                         total_value=total_gift_value
                     )
-                    self.log.info(f"连击礼物更新记录: {user} {gift_name}x{gift_count}, db_id={db_id}")
+                    self.log.debug(f"连击礼物更新记录: {user} {gift_name}x{gift_count}, db_id={db_id}")
 
                 # 连击结束时清理内存
                 if gift_msg.repeat_end == 1:
@@ -537,11 +537,11 @@ class WebDouyinLiveFetcher:
                 'age_range': age_range,
             }
             self.socketio.emit(f'room_{self.live_id}', message_data, room=f'room_{self.live_id}')
-            self.log.info(f"发送礼物消息: {user} 送出了 {gift_name}x{gift_count},单价{gift_price},总价值{total_gift_value}")
+            self.log.debug(f"发送礼物消息: {user} 送出了 {gift_name}x{gift_count},单价{gift_price},总价值{total_gift_value}")
             return
 
         # ========== 兜底逻辑：无 group_id 的礼物 ==========
-        self.log.info(f"[礼物消息-兜底] user={user}, gift={gift_name}, 无group_id")
+        self.log.debug(f"[礼物消息-兜底] user={user}, gift={gift_name}, 无group_id")
         gift_count = gift_msg.group_count
         total_gift_value = gift_price * gift_count
 
@@ -607,7 +607,7 @@ class WebDouyinLiveFetcher:
             'age_range': age_range,
         }
         self.socketio.emit(f'room_{self.live_id}', message_data, room=f'room_{self.live_id}')
-        self.log.info(f"发送礼物消息: {user} 送出了 {gift_name}x{gift_count},单价{gift_price},总价值{total_gift_value}")
+        self.log.debug(f"发送礼物消息: {user} 送出了 {gift_name}x{gift_count},单价{gift_price},总价值{total_gift_value}")
 
     def _handle_stats_message(self, stats_msg):
         """处理统计消息"""

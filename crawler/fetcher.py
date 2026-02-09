@@ -366,13 +366,13 @@ class DouyinLiveWebFetcher:
         获取直播间开播状态:
         room_status: 2 直播已结束
         room_status: 0 直播进行中
-        :return: True 表示正在直播, False 表示未开播或出错
+        :return: True 表示正在直播, False 表示未开播, None 表示请求失败（疑似风控）
         """
         try:
             # 检查 room_id 是否可用
             if not self.room_id:
                 self.log.warning("无法获取 roomId，直播间可能已结束")
-                return False
+                return None
 
             # 添加防风控排队读取延迟
             if config.ANTI_DETECTION_ENABLED and config.ANTI_DETECTION_QUEUE_READ_DELAY > 0:
@@ -401,33 +401,33 @@ class DouyinLiveWebFetcher:
 
             # 检查响应内容是否为空
             if not resp.text or len(resp.text) == 0:
-                self.log.warning("无法获取直播间状态（API返回空响应）")
-                return False
+                self.log.info("无法获取直播间状态（API返回空响应）")
+                return None
 
             # 解析 JSON 响应
             try:
                 json_data = resp.json()
             except requests.exceptions.JSONDecodeError:
-                self.log.warning("无法解析直播间状态（响应不是有效的JSON）")
-                return False
+                self.log.info("无法解析直播间状态（响应不是有效的JSON）")
+                return None
 
             # 检查 JSON 数据结构
             if not json_data or not isinstance(json_data, dict):
-                self.log.warning("直播间状态响应格式异常（空数据或非字典）")
-                return False
+                self.log.info("直播间状态响应格式异常（空数据或非字典）")
+                return None
 
             data = json_data.get('data')
             if not data or not isinstance(data, dict):
-                self.log.warning("直播间状态响应缺少 data 字段")
-                return False
+                self.log.info("直播间状态响应缺少 data 字段")
+                return None
 
             room_status = data.get('room_status')
             user = data.get('user')
 
             # 检查 room_status
             if room_status is None:
-                self.log.warning("直播间状态响应缺少 room_status 字段")
-                return False
+                self.log.info("直播间状态响应缺少 room_status 字段")
+                return None
 
             # 处理主播信息
             if user and isinstance(user, dict):
@@ -450,8 +450,8 @@ class DouyinLiveWebFetcher:
                 return is_live
 
         except Exception as e:
-            self.log.warning(f"获取直播间状态时出错: {e}")
-            return False
+            self.log.info(f"获取直播间状态时出错: {e}")
+            return None
 
     def _connectWebSocket(self):
         """
