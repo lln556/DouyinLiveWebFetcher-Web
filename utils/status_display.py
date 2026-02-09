@@ -46,6 +46,10 @@ else:
     console = Console(stderr=True)
     _RICH_MODE = True
 
+# ANSI 转义码
+ANSI_CLEAR = "\033[2J\033[H"  # 清屏 + 光标移到左上角
+ANSI_EL = "\033[K"  # 清除到行尾
+
 # 状态颜色映射
 STATUS_STYLES = {
     'monitoring': 'bold green',
@@ -88,6 +92,7 @@ class StatusDisplay:
         self._stop_event = threading.Event()
         self._live = None
         self._rich_mode = _RICH_MODE
+        self._first_run = True  # 首次运行标志
 
         if _IS_DOCKER:
             sys.stderr.write("[StatusDisplay] Docker 环境检测，使用文本模式输出状态\n")
@@ -182,11 +187,15 @@ class StatusDisplay:
                     row['current_user_count'] = monitored.stats.get('current_user_count', 0)
                     row['total_income'] = monitored.stats.get('total_income', 0)
 
-                # 错误信息
+                # 错误信息（首次运行不显示疑似风控）
                 if room.status == 'error' and room.error_message:
                     row['note'] = room.error_message[:24]
                 elif room.status in ('offline', 'waiting') and room.error_message:
-                    row['note'] = room.error_message[:24]
+                    # 首次运行不显示"疑似风控"
+                    if self._first_run and "疑似风控" in room.error_message:
+                        row['note'] = "初始化中..."
+                    else:
+                        row['note'] = room.error_message[:24]
 
                 rows.append(row)
         except Exception:
@@ -195,37 +204,57 @@ class StatusDisplay:
         return rows
 
     def _print_text_status(self):
-        """文本模式：简单打印状态列表（Docker 环境使用）"""
+        """文本模式：打印状态列表（Docker 环境使用）"""
         display_rows = self._get_display_data()
         if not display_rows:
             return
 
         now = datetime.now(CHINA_TZ).strftime('%Y-%m-%d %H:%M:%S')
-        sys.stderr.write(f"\n[{now}] 直播监控状态:\n")
-        sys.stderr.write("-" * 90 + "\n")
 
+        # 使用 ANSI 转义码清屏并重绘
+        sys.stderr.write(ANSI_CLEAR)
+        sys.stderr.flush()
+
+        # 标题
+        sys.stderr.write(f"抖音直播监控平台 | 运行中 | {now}\n")
+        sys.stderr.write("=" * 110 + "\n")
+
+        # 表头
+        sys.stderr.write(
+            f"{'主播':<20s} | {'live_id':<15s} | {'监控状态':<8s} | {'直播':<6s} | "
+            f"{'在线人数':<8s} | {'收入':<10s} | {'备注'}\n"
+        )
+        sys.stderr.write("-" * 110 + "\n")
+
+        # 数据行
         for row in display_rows:
             status = row.get('status', 'stopped')
             status_label = STATUS_LABELS.get(status, status)
             live_label = LIVE_STATUS_LABELS.get(status, '未知')
 
             viewer_count = row.get('current_user_count', 0)
-            viewer_str = f"{viewer_count:,}" if status == 'monitoring' and viewer_count > 0 else "-"
+            if status == 'monitoring' and viewer_count > 0:
+                viewer_str = f"{viewer_count:,}"
+            else:
+                viewer_str = "-"
 
             total_income = row.get('total_income', 0)
-            income_str = f"{total_income:,.0f}" if total_income > 0 else "-"
+            if total_income > 0:
+                income_str = f"{total_income:,.0f}"
+            else:
+                income_str = "-"
 
             note = row.get('note', '')
-
-            anchor = row.get('anchor_name', '未知')[:20]
+            anchor = (row.get('anchor_name', '未知')[:20] + "..") if len(row.get('anchor_name', '')) > 20 else row.get('anchor_name', '未知')[:20]
             live_id = row.get('live_id', '')[:15]
 
             sys.stderr.write(
-                f"{anchor:20s} | {live_id:15s} | {status_label:6s} | "
-                f"{live_label:6s} | {viewer_str:>8s} | {income_str:>10s} | {note}\n"
+                f"{anchor:<20s} | {live_id:<15s} | {status_label:<8s} | "
+                f"{live_label:<6s} | {viewer_str:>8s} | {income_str:>10s} | {note}\n"
             )
 
-        sys.stderr.write("-" * 90 + "\n")
+        sys.stderr.write("=" * 110 + "\n")
+        sys.stderr.flush()
 
     def _run(self):
         """后台线程：刷新状态显示"""
@@ -246,10 +275,11 @@ class StatusDisplay:
             except Exception:
                 self._live = None
         else:
-            # 文本模式：定期打印状态（Docker 环境）
+            # 文本模式：定期刷新状态（Docker 环境）
             while not self._stop_event.is_set():
                 self._print_text_status()
                 self._stop_event.wait(self.refresh_interval)
+                self._first_run = False  # 首次运行后更新标志
 
     def start(self):
         """启动状态面板"""

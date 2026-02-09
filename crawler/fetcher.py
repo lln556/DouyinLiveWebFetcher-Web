@@ -369,7 +369,7 @@ class DouyinLiveWebFetcher:
         :return: True 表示正在直播, False 表示未开播, None 表示请求失败（疑似风控）
         """
         try:
-            # 检查 room_id 是否可用
+            # 检查 room_id 是否可用（风控情况1: 无法获取 roomId）
             if not self.room_id:
                 self.log.warning("无法获取 roomId，直播间可能已结束")
                 return None
@@ -402,24 +402,24 @@ class DouyinLiveWebFetcher:
             # 检查响应内容是否为空
             if not resp.text or len(resp.text) == 0:
                 self.log.info("无法获取直播间状态（API返回空响应）")
-                return None
+                return False
 
             # 解析 JSON 响应
             try:
                 json_data = resp.json()
             except requests.exceptions.JSONDecodeError:
                 self.log.info("无法解析直播间状态（响应不是有效的JSON）")
-                return None
+                return False
 
             # 检查 JSON 数据结构
             if not json_data or not isinstance(json_data, dict):
                 self.log.info("直播间状态响应格式异常（空数据或非字典）")
-                return None
+                return False
 
             data = json_data.get('data')
             if not data or not isinstance(data, dict):
                 self.log.info("直播间状态响应缺少 data 字段")
-                return None
+                return False
 
             room_status = data.get('room_status')
             user = data.get('user')
@@ -427,7 +427,7 @@ class DouyinLiveWebFetcher:
             # 检查 room_status
             if room_status is None:
                 self.log.info("直播间状态响应缺少 room_status 字段")
-                return None
+                return False
 
             # 处理主播信息
             if user and isinstance(user, dict):
@@ -450,8 +450,13 @@ class DouyinLiveWebFetcher:
                 return is_live
 
         except Exception as e:
+            # 风控情况3: 'NoneType' object is not iterable
+            if "'NoneType' object is not iterable" in str(e):
+                self.log.info(f"获取直播间状态时出错: {e}")
+                return None
+            # 其他异常返回 False（未开播）
             self.log.info(f"获取直播间状态时出错: {e}")
-            return None
+            return False
 
     def _connectWebSocket(self):
         """
