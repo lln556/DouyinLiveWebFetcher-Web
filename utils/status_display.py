@@ -9,6 +9,7 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
+from wcwidth import wcswidth
 
 from rich.console import Console
 from rich.live import Live
@@ -76,6 +77,34 @@ LIVE_STATUS_LABELS = {
     'error': '未知',
     'stopped': '未开播',
 }
+
+
+def _pad_to_width(text: str, width: int, align: str = 'center') -> str:
+    """
+    将文本填充到指定显示宽度（考虑中文字符占2列）
+
+    :param text: 原文本
+    :param width: 目标显示宽度（列数）
+    :param align: 对齐方式 'left', 'center', 'right'
+    :return: 填充后的文本
+    """
+    display_width = wcswidth(text)
+    if display_width >= width:
+        # 超宽则截断
+        truncated = text
+        while wcswidth(truncated) > width and truncated:
+            truncated = truncated[:-1]
+        return truncated
+
+    padding = width - display_width
+    if align == 'left':
+        return text + ' ' * padding
+    elif align == 'right':
+        return ' ' * padding + text
+    else:  # center
+        left_pad = padding // 2
+        right_pad = padding - left_pad
+        return ' ' * left_pad + text + ' ' * right_pad
 
 
 class StatusDisplay:
@@ -217,13 +246,19 @@ class StatusDisplay:
 
         # 标题
         sys.stderr.write(f"抖音直播监控平台 | 运行中 | {now}\n")
-        sys.stderr.write("=" * 110 + "\n")
+        sys.stderr.write("=" * 115 + "\n")
 
-        # 表头
-        sys.stderr.write(
-            f"{'主播':^20s} | {'live_id':^15s} | {'监控状态':^8s} | {'直播':^6s} | "
-            f"{'在线人数':^8s} | {'收入':^10s} | {'备注':^30s}\n"
+        # 表头（使用显示宽度填充）
+        header = (
+            _pad_to_width('主播', 20, 'center') + " | " +
+            _pad_to_width('live_id', 15, 'center') + " | " +
+            _pad_to_width('监控状态', 8, 'center') + " | " +
+            _pad_to_width('直播', 6, 'center') + " | " +
+            _pad_to_width('在线人数', 8, 'center') + " | " +
+            _pad_to_width('收入', 10, 'center') + " | " +
+            _pad_to_width('备注', 30, 'center')
         )
+        sys.stderr.write(header + "\n")
         sys.stderr.write("-" * 115 + "\n")
 
         # 数据行
@@ -245,13 +280,19 @@ class StatusDisplay:
                 income_str = "-"
 
             note = row.get('note', '')
-            anchor = row.get('anchor_name', '未知')[:18]
-            live_id = row.get('live_id', '')[:15]
+            anchor = row.get('anchor_name', '未知')
+            live_id = row.get('live_id', '')
 
-            sys.stderr.write(
-                f"{anchor:^20s} | {live_id:^15s} | {status_label:^8s} | "
-                f"{live_label:^6s} | {viewer_str:^8s} | {income_str:^10s} | {note:^30s}\n"
+            line = (
+                _pad_to_width(anchor, 20, 'center') + " | " +
+                _pad_to_width(live_id, 15, 'center') + " | " +
+                _pad_to_width(status_label, 8, 'center') + " | " +
+                _pad_to_width(live_label, 6, 'center') + " | " +
+                _pad_to_width(viewer_str, 8, 'center') + " | " +
+                _pad_to_width(income_str, 10, 'center') + " | " +
+                _pad_to_width(note, 30, 'left')
             )
+            sys.stderr.write(line + "\n")
 
         sys.stderr.write("=" * 115 + "\n")
         sys.stderr.flush()
