@@ -66,10 +66,12 @@ def init_rooms_api(data_service: DataService, room_manager, socketio):
             if not live_id:
                 return jsonify({'error': '请提供直播间ID'}), 400
 
-            # 验证 live_id 格式：必须是纯数字，长度不超过 20 位
+            # 验证 live_id 格式：支持纯数字房间号或字母数字组合的抖音号
             import re
-            if not re.match(r'^\d{1,20}$', str(live_id).strip()):
-                return jsonify({'error': '直播间ID格式错误，应为1-20位纯数字'}), 400
+            live_id_clean = str(live_id).strip()
+            # 允许1-20位纯数字，或1-50位字母数字组合
+            if not (re.match(r'^\d{1,20}$', live_id_clean) or re.match(r'^[a-zA-Z0-9]{1,50}$', live_id_clean)):
+                return jsonify({'error': '直播间ID格式错误，应为纯数字房间号或字母数字组合的抖音号'}), 400
 
             live_id = live_id.strip()
 
