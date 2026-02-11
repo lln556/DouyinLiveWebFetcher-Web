@@ -113,7 +113,7 @@
                 <table class="w-full">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">直播间ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">房间ID/抖音号</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">主播名称</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">监控状态</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">直播状态</th>
@@ -181,12 +181,19 @@
                 </div>
                 <div class="px-6 py-4 space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">直播间ID</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">房间ID或抖音号</label>
                         <input
                             v-model="newRoom.live_id"
                             type="text"
-                            placeholder="例如: 261378947940"
+                            placeholder="支持纯数字房间号或字母数字组合的抖音号"
                             class="w-full px-3 py-2 border rounded-lg transition-all duration-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                    </div>
+                    <div class="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+                        <div class="font-medium mb-1">支持输入格式：</div>
+                        <ul class="list-disc list-inside text-xs space-y-1">
+                            <li>纯数字房间号：261378947940</li>
+                            <li>抖音号（字母数字组合）</li>
+                        </ul>
                     </div>
                     <div class="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
                         <div class="font-medium mb-1">监控模式说明：</div>
