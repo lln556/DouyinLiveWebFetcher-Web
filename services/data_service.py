@@ -837,6 +837,26 @@ class DataService:
                 session_obj.end_time = get_china_now()
                 if peak_viewer_count is not None:
                     session_obj.peak_viewer_count = max(session_obj.peak_viewer_count or 0, peak_viewer_count)
+
+                # 从 gift_messages 表重新聚合统计，校正增量累加可能产生的误差
+                gift_agg = session.query(
+                    func.coalesce(func.sum(GiftMessage.total_value), 0),
+                    func.coalesce(func.sum(GiftMessage.gift_count), 0)
+                ).filter(
+                    GiftMessage.live_session_id == session_id
+                ).one()
+                reconciled_income = int(gift_agg[0])
+                reconciled_gift_count = int(gift_agg[1])
+
+                if reconciled_income != session_obj.total_income or reconciled_gift_count != session_obj.total_gift_count:
+                    logger.info(
+                        f"场次统计校正: session_id={session_id}, "
+                        f"income {session_obj.total_income} -> {reconciled_income}, "
+                        f"gift_count {session_obj.total_gift_count} -> {reconciled_gift_count}"
+                    )
+                    session_obj.total_income = reconciled_income
+                    session_obj.total_gift_count = reconciled_gift_count
+
                 session_obj.updated_at = get_china_now()
                 session.commit()
                 return True

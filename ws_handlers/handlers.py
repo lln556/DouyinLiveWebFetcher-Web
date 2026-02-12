@@ -335,10 +335,14 @@ class WebDouyinLiveFetcher:
 
             if current_count is not None and current_count > 0:
                 # ========== 连击礼物：使用 combo_count 跟踪 ==========
+                # 获取每次连击的礼物数量
+                per_combo_count = gift_msg.group_count if hasattr(gift_msg, 'group_count') else 1
+
                 # 初始化或获取 combo 状态
                 if combo_key not in self.monitored_room.combo_gifts:
                     self.monitored_room.combo_gifts[combo_key] = {
                         'last_count': 0,
+                        'last_gift_count': 0,
                         'db_id': None,
                     }
 
@@ -349,12 +353,23 @@ class WebDouyinLiveFetcher:
                     self.log.debug(f"连击礼物重复消息，跳过: combo_key={combo_key}, count={current_count}")
                     return
 
-                # 更新状态
+                # 检测 combo_count 回退（如抖音发送汇总消息导致 combo_count 变小）
                 count_diff = current_count - last_count
-                self.monitored_room.combo_gifts[combo_key]['last_count'] = current_count
+                if count_diff < 0:
+                    # combo_count 回退，重置为新序列
+                    self.log.info(
+                        f"连击礼物 combo_count 回退，重置为新序列: combo_key={combo_key}, "
+                        f"last_count={last_count}, current_count={current_count}, "
+                        f"per_combo_count={per_combo_count}"
+                    )
+                    self.monitored_room.combo_gifts[combo_key] = {
+                        'last_count': 0,
+                        'last_gift_count': 0,
+                        'db_id': None,
+                    }
 
-                # 获取每次连击的礼物数量
-                per_combo_count = gift_msg.group_count if hasattr(gift_msg, 'group_count') else 1
+                # 更新状态
+                self.monitored_room.combo_gifts[combo_key]['last_count'] = current_count
 
                 # 总礼物数量 = 连击次数 × 每次数量
                 gift_count = current_count * per_combo_count
@@ -393,14 +408,26 @@ class WebDouyinLiveFetcher:
                     )
                     self.log.debug(f"连击礼物更新记录: {user} {gift_name}x{gift_count}, db_id={db_id}")
 
-                # 连击结束时清理内存
-                if gift_msg.repeat_end == 1:
-                    del self.monitored_room.combo_gifts[combo_key]
-
                 # 计算本次增量（用于统计和推送）
-                # 增量礼物数量 = 连击增量 × 每次数量
-                partial_count = count_diff * per_combo_count
+                # 使用总礼物数量差值，而非 count_diff * per_combo_count
+                # 因为 group_count 在同一连击序列中可能变化
+                last_gift_count = self.monitored_room.combo_gifts[combo_key]['last_gift_count']
+                partial_count = gift_count - last_gift_count
+                self.monitored_room.combo_gifts[combo_key]['last_gift_count'] = gift_count
                 partial_value = gift_price * partial_count
+
+                # 防护：跳过非正增量，防止任何情况下产生负数统计
+                if partial_count <= 0:
+                    self.log.warning(
+                        f"连击礼物增量异常，跳过统计更新: combo_key={combo_key}, "
+                        f"gift_count={gift_count}, last_gift_count={last_gift_count}, "
+                        f"partial_count={partial_count}"
+                    )
+                    # 数据库记录已更新（总量是正确的），只跳过增量统计和推送
+                    if gift_msg.repeat_end == 1:
+                        del self.monitored_room.combo_gifts[combo_key]
+                    return
+
                 self.total_income += partial_value
                 self.gift_users.add(user)
                 self.monitored_room.stats['total_income'] = self.total_income
@@ -454,6 +481,11 @@ class WebDouyinLiveFetcher:
                     'age_range': age_range,
                 }
                 self.socketio.emit(f'room_{self.live_id}', message_data, room=f'room_{self.live_id}')
+
+                # 连击结束时清理内存
+                if gift_msg.repeat_end == 1:
+                    del self.monitored_room.combo_gifts[combo_key]
+
                 return
 
             # ========== 有 group_id 但没有 combo_count：普通礼物 ==========
@@ -465,6 +497,7 @@ class WebDouyinLiveFetcher:
             # 标记为已处理
             self.monitored_room.combo_gifts[combo_key] = {
                 'last_count': 0,
+                'last_gift_count': 0,
                 'db_id': None,
             }
 
