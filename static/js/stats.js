@@ -512,15 +512,6 @@ const app = new Vue({
                 end_date: options.end_date || null
             };
 
-            // 如果没有指定日期范围，使用当前筛选的日期范围
-            if (!this.userMessagesQuery.start_date || !this.userMessagesQuery.end_date) {
-                const dateRange = this.getDateRange();
-                if (dateRange) {
-                    this.userMessagesQuery.start_date = dateRange.start;
-                    this.userMessagesQuery.end_date = dateRange.end;
-                }
-            }
-
             // 重置数据
             this.userMessagesData = {
                 user: {
@@ -625,11 +616,14 @@ const app = new Vue({
         formatUserMessageTime(dateStr) {
             if (!dateStr) return '';
             const d = new Date(dateStr);
-            return d.toLocaleTimeString('zh-CN', {
+            const MM = String(d.getMonth() + 1).padStart(2, '0');
+            const DD = String(d.getDate()).padStart(2, '0');
+            const time = d.toLocaleTimeString('zh-CN', {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit'
             });
+            return `${MM}-${DD} ${time}`;
         },
         formatAgeRange(val) {
             const map = {0: '-', 1: '<18', 2: '18-23', 3: '24-30', 4: '31-40', 5: '41-50', 6: '>50'};

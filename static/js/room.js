@@ -523,11 +523,14 @@ const app = new Vue({
         formatUserMessageTime(dateStr) {
             if (!dateStr) return '';
             const d = new Date(dateStr);
-            return d.toLocaleTimeString('zh-CN', {
+            const MM = String(d.getMonth() + 1).padStart(2, '0');
+            const DD = String(d.getDate()).padStart(2, '0');
+            const time = d.toLocaleTimeString('zh-CN', {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit'
             });
+            return `${MM}-${DD} ${time}`;
         },
         formatAgeRange(val) {
             const map = {0: '-', 1: '<18', 2: '18-23', 3: '24-30', 4: '31-40', 5: '41-50', 6: '>50'};
